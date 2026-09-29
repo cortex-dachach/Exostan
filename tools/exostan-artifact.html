@@ -1,0 +1,1323 @@
+<title>Exostan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* Layout: clinical workstation. Tabs for Assess, Patient view, Case library, Knowledge base.
+   Assess = radiograph light box left, verification and scoring sheet right; stacks on phones */
+:root{
+  --bg:#ECEFF2; --panel:#FFFFFF; --ink:#15202A; --muted:#5A6774; --line:#D2D8DE; --soft:#F4F6F8;
+  --accent:#1F5E8C; --accent-ink:#FFFFFF; --ai:#B7791F;
+  --ok:#2C7A57; --warn:#A8701A; --bad:#B23A3A; --refer:#6A3E9E;
+  --box:#0A0D10;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E141A; --panel:#151E27; --ink:#E3E9EF; --muted:#94A2AF; --line:#27333F; --soft:#1B2631;
+  --accent:#6AA8D8; --accent-ink:#0B1520; --ai:#E0A445; --ok:#5DBB8C; --warn:#E0A445; --bad:#E07070; --refer:#B08BE0; --box:#05070A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E141A; --panel:#151E27; --ink:#E3E9EF; --muted:#94A2AF; --line:#27333F; --soft:#1B2631;
+  --accent:#6AA8D8; --accent-ink:#0B1520; --ai:#E0A445; --ok:#5DBB8C; --warn:#E0A445; --bad:#E07070; --refer:#B08BE0; --box:#05070A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1400px;margin:0 auto;padding-inline:16px;padding-block:16px 40px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 24px;margin-bottom:12px}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.14em;margin:0;line-height:1}
+.brand p{margin:0;color:var(--muted);max-width:60ch}
+.badge{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);color:var(--muted);padding:3px 8px;border-radius:3px}
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:10px 14px;font-family:var(--f-display);font-size:15px;font-weight:600;letter-spacing:.03em;color:var(--muted);white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.viewer{padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font-family:var(--f-body);font-size:13px;font-weight:500;border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:7px 12px;border-radius:4px;cursor:pointer;line-height:1.3}
+button:hover:not(:disabled),.btn:hover{border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,.btn:focus-within,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.aibtn{background:var(--ai);color:#fff;border-color:var(--ai)}
+.btn{position:relative;display:inline-block}
+.btn input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.sliders{display:flex;gap:12px;flex-wrap:wrap;margin-left:auto;align-items:center;color:var(--muted);font-size:12px}
+.sliders label{display:flex;align-items:center;gap:6px}
+.sliders input[type=range]{width:80px}
+.stage{position:relative;background:var(--box);border-radius:4px;overflow:auto;max-height:72vh}
+.stage.drag{outline:2px dashed var(--accent);outline-offset:-6px}
+canvas#cv{display:block;height:auto;touch-action:none;cursor:crosshair;max-width:none}
+#loupe{position:fixed;width:170px;height:170px;border-radius:50%;border:3px solid var(--accent);pointer-events:none;z-index:20;box-shadow:0 4px 18px rgba(0,0,0,.35);background:#000}
+.prompt{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+.prompt .n{font-family:var(--f-mono);font-size:12px;background:var(--accent);color:var(--accent-ink);border-radius:3px;padding:2px 7px}
+.prompt strong{font-family:var(--f-display);font-size:16px;letter-spacing:.02em}
+.prompt span.h{color:var(--muted);flex:1 1 240px;min-width:0}
+.approve{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:4px;border:1px solid var(--ai);background:var(--panel)}
+.stage .busy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);color:#fff;font-family:var(--f-display);font-size:18px;letter-spacing:.04em;pointer-events:none}
+.tipsrow{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.tipsrow .aibtn{flex:none;padding:9px 16px;font-weight:600}
+.aistatus{font-size:13px;padding:8px 12px;border-radius:4px;border:1px solid var(--line);border-left:4px solid var(--ai);background:var(--panel)}
+.note{font-size:12px;color:var(--muted);margin:0}
+.steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:3px 10px;margin:0;padding:0;list-style:none}
+.steps li{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);padding:4px 6px;border-radius:3px;cursor:pointer;border:1px solid transparent}
+.steps li .dot{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:10px;flex:none}
+.steps li.done{color:var(--ink)}
+.steps li.done .dot{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.steps li.ai .dot{background:var(--ai);border-color:var(--ai);color:#fff}
+.steps li.cur{background:var(--soft);color:var(--ink);font-weight:600}
+.steps li.cur .dot{border-color:var(--accent);color:var(--accent)}
+.steps li.sel{border-color:var(--accent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sec{padding:14px 16px}
+.sec h2{font-family:var(--f-display);font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.scores{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:420px){.scores{grid-template-columns:1fr}}
+.score .lab{font-size:12px;color:var(--muted)}
+.score .val{font-family:var(--f-display);font-size:44px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.score .val small{font-size:20px;color:var(--muted);font-weight:500}
+.score .sub{font-size:12px;color:var(--muted);margin-top:4px}
+.bar{height:8px;background:var(--soft);border:1px solid var(--line);border-radius:4px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:3px;color:#fff;background:var(--muted)}
+.chip{display:inline-block;font-family:var(--f-mono);font-size:10px;letter-spacing:.05em;padding:0 5px;border-radius:3px;border:1px solid var(--ai);color:var(--ai);margin-left:4px;vertical-align:1px}
+.c-ok{background:var(--ok)} .c-warn{background:var(--warn)} .c-bad{background:var(--bad)} .c-refer{background:var(--refer)}
+.t-ok{color:var(--ok)} .t-warn{color:var(--warn)} .t-bad{color:var(--bad)} .t-refer{color:var(--refer)}
+.verdict{margin-top:12px;padding:10px 12px;border-radius:4px;background:var(--soft);border-left:4px solid var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:500;color:var(--muted);font-size:12px}
+td.num,th.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.tbl{overflow-x:auto}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px}
+@media (max-width:460px){.checks{grid-template-columns:1fr}}
+.checks label{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:460px){.form{grid-template-columns:1fr}}
+.form label,.row label{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px;min-width:0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+select,input[type=text],input[type=number],input[type=date],textarea{font-family:var(--f-body);font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink);width:100%;min-width:0}
+input[type=number]{width:90px}
+textarea{min-height:74px;resize:vertical}
+.verify{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:4px;border:1px solid var(--line);background:var(--soft);font-size:13px}
+.verify.ok{border-color:var(--ok)}
+.exports{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:460px){.exports{grid-template-columns:1fr}}
+.exports button{text-align:left;padding:10px 12px}
+.exports button b{display:block;font-weight:600}
+.exports button span{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.exports button.primary span{color:inherit;opacity:.85}
+pre.report{font-family:var(--f-mono);font-size:12px;white-space:pre-wrap;background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:10px;margin:0;max-height:280px;overflow:auto}
+.warnbox{border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--panel);padding:10px 14px;border-radius:4px;font-size:12.5px;color:var(--muted);margin-top:16px}
+.muted{color:var(--muted)}
+.msg{font-size:12.5px;color:var(--muted);min-height:1.2em}
+/* patient view */
+.patient{max-width:760px;margin:0 auto;padding:24px 22px;display:flex;flex-direction:column;gap:18px}
+.patient h2{font-family:var(--f-display);font-size:26px;margin:0;letter-spacing:.01em;text-wrap:balance}
+.patient h3{font-family:var(--f-display);font-size:17px;margin:0 0 6px;letter-spacing:.02em}
+.patient p{margin:0;max-width:65ch}
+.scale{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px}
+.scale div{padding:8px 6px;border-radius:4px;background:var(--soft);border:1px solid var(--line);font-size:12.5px;text-align:center;color:var(--muted)}
+.scale div.on{color:#fff;font-weight:600;border-color:transparent}
+.patient ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+/* knowledge */
+.kb{display:flex;flex-direction:column;gap:16px}
+.kb .sec p{margin:0 0 8px;max-width:80ch}
+.kb a{color:var(--accent)}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat div{background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+.stat b{display:block;font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.outrow td{background:var(--soft)}
+.outform{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>EXOSTAN</h1>
+      <p>Third molar extraction difficulty and IAN risk from a panoramic radiograph. AI proposes, the dentist verifies, the report goes out.</p>
+    </div>
+    <span class="badge">v0.3 · research use</span>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-assess" aria-selected="true" aria-controls="pane-assess">Assess</button>
+    <button role="tab" id="tab-patient" aria-selected="false" aria-controls="pane-patient">Patient view</button>
+    <button role="tab" id="tab-library" aria-selected="false" aria-controls="pane-library">Case library</button>
+    <button role="tab" id="tab-kb" aria-selected="false" aria-controls="pane-kb">Knowledge base</button>
+  </nav>
+
+  <!-- ============ ASSESS ============ -->
+  <section id="pane-assess" role="tabpanel" aria-labelledby="tab-assess">
+    <div class="grid">
+      <section class="panel viewer" aria-label="Radiograph viewer">
+        <div class="toolbar">
+          <label class="btn primary">Upload OPG
+            <input id="file" type="file" accept="image/*">
+          </label>
+          <button id="aiDetect" class="aibtn" type="button">Re-run AI detection</button>
+          <button id="sample" type="button">Sample case</button>
+          <button id="undo" type="button">Undo</button>
+          <button id="clear" type="button">Clear</button>
+          <div class="sliders">
+            <label for="zoom">Zoom <select id="zoom" style="width:auto"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
+            <label for="bright">Brightness <input id="bright" type="range" min="50" max="180" value="100"></label>
+            <label for="contrast">Contrast <input id="contrast" type="range" min="50" max="220" value="115"></label>
+          </div>
+        </div>
+
+        <div class="aistatus" id="aiStatus" hidden></div>
+        <p class="note" id="diag" hidden></p>
+
+        <div class="prompt" id="prompt">
+          <span class="n" id="pN">1/12</span>
+          <strong id="pName">M1 cusp tip</strong>
+          <span class="h" id="pHint"></span>
+        </div>
+
+        <div class="approve" id="approveBar" hidden>
+          <div><strong>AI placed all 12 landmarks.</strong> <span class="muted">Check the overlay. Drag any point that is off, then approve.</span></div>
+          <div class="toolbar"><button id="approveAll" class="primary" type="button">Approve landmarks</button><button id="rerun" type="button">Re-run AI</button></div>
+        </div>
+
+        <div class="stage" id="stage">
+          <div class="busy" id="busy" hidden>Detecting landmarks…</div>
+          <canvas id="cv" width="1200" height="700" aria-label="Radiograph with landmarks. Click to place the highlighted landmark, drag any point to adjust, or select a point and use the arrow keys." tabindex="0"></canvas>
+        </div>
+        <div class="legend"><span><i style="background:#F2A93B"></i>AI proposed, not yet checked</span><span><i style="background:#4FB3FF"></i>Placed or confirmed by dentist</span><span><i style="background:#FFD35A"></i>Selected</span></div>
+        <div class="tipsrow">
+          <button id="fillAi" class="aibtn" type="button">Fill with AI</button>
+          <p class="note" style="flex:1 1 280px;min-width:0">Upload an OPG and Exostan detects the third molar and all 12 landmarks automatically. Your role is to check and approve. To correct a point, drag it (a magnifier appears while dragging). Click a landmark name below to select it, then use the arrow keys to nudge it, or click the image to move it there. Drop a JPG or PNG export onto the viewer; export DICOM to PNG first.</p>
+        </div>
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <aside class="side">
+        <section class="panel sec" aria-label="Case details">
+          <h2>Case details</h2>
+          <div class="form">
+            <label for="drName">Dentist name<input id="drName" type="text" placeholder="Dr. Moneeb ..." autocomplete="name"></label>
+            <label for="clinic">Clinic<input id="clinic" type="text" placeholder="Clinic name"></label>
+            <label for="ptName">Patient name<input id="ptName" type="text" placeholder="Patient full name"></label>
+            <label for="ptFile">Patient file no.<input id="ptFile" type="text" placeholder="e.g. 204518"></label>
+            <label for="caseDate">Date<input id="caseDate" type="date"></label>
+            <label for="tooth">Tooth
+              <select id="tooth"><option value="38">38 (lower left, image right)</option><option value="48">48 (lower right, image left)</option></select>
+            </label>
+          </div>
+          <p class="note" style="margin-top:8px">Patient name and file number appear only on the reports. The case library keeps de-identified findings.</p>
+        </section>
+
+        <section class="panel sec" aria-label="Scores">
+          <h2><span>Exostan result · tooth <span id="toothLabel">38</span></span><span id="learnTag" class="muted" style="text-transform:none;letter-spacing:0;font-size:12px"></span></h2>
+          <div class="scores">
+            <div class="score">
+              <div class="lab">Extraction difficulty</div>
+              <div class="val" id="diffVal">–<small>%</small></div>
+              <div class="bar"><i id="diffBar"></i></div>
+              <span class="pill" id="diffBand">Awaiting landmarks</span>
+              <div class="sub" id="diffSub"></div>
+            </div>
+            <div class="score">
+              <div class="lab">IAN contact likelihood</div>
+              <div class="val" id="ianVal">–<small>%</small></div>
+              <div class="bar"><i id="ianBar"></i></div>
+              <span class="pill" id="ianBand">Awaiting landmarks</span>
+              <div class="sub" id="ianSub"></div>
+            </div>
+          </div>
+          <div class="verdict" id="verdict">Upload an OPG and press AI detect landmarks, or place the 12 points yourself.</div>
+          <div class="verdict" id="similar" hidden></div>
+        </section>
+
+        <section class="panel sec" aria-label="Classification">
+          <h2>Classification</h2>
+          <div class="tbl"><table>
+            <thead><tr><th>Factor</th><th>Finding</th><th class="num">Measure</th><th class="num">Pts</th></tr></thead>
+            <tbody id="clsBody"></tbody>
+            <tfoot><tr><th colspan="3">Pederson index (3 to 10) + modifiers</th><td class="num" id="totalPts">–</td></tr></tfoot>
+          </table></div>
+          <div class="verdict" id="paperRule" style="margin-top:10px"></div>
+        </section>
+
+        <section class="panel sec" aria-label="Clinical review">
+          <h2>Dentist review</h2>
+          <div class="form">
+            <label for="angOv">Angulation
+              <select id="angOv"><option value="auto">Auto from landmarks</option><option value="Vertical">Vertical</option><option value="Mesioangular">Mesioangular</option><option value="Horizontal">Horizontal</option><option value="Distoangular">Distoangular</option></select>
+            </label>
+            <label for="contactOv">M2 contact
+              <select id="contactOv"><option value="auto">Auto from landmarks</option><option value="yes">Contact</option><option value="no">No contact</option></select>
+            </label>
+            <label for="roots">Root morphology
+              <select id="roots"><option value="0">Fused or conical</option><option value="1">Multiple or divergent</option><option value="2">Curved or hooked</option></select>
+            </label>
+            <label for="crownMm">M3 crown width (mm, for scale)
+              <input id="crownMm" type="number" min="7" max="14" step="0.5" value="10">
+            </label>
+          </div>
+          <p class="note" style="margin:12px 0 6px">Rood and Shehab signs on this OPG (see Knowledge base for how to read each one):</p>
+          <div class="checks" id="rood"></div>
+          <label for="obs" class="note" style="display:block;margin-top:12px">Clinical observations
+            <textarea id="obs" placeholder="Mouth opening, pericoronitis, caries on 37, patient anxiety, medical history relevant to surgery..."></textarea>
+          </label>
+          <p class="note" style="margin:12px 0 6px">Actions taken:</p>
+          <div class="checks" id="actions"></div>
+          <label for="otherAct" class="note" style="display:block;margin-top:8px">Other actions
+            <input id="otherAct" type="text" placeholder="e.g. Chlorhexidine rinse prescribed">
+          </label>
+          <div class="row">
+            <label for="drBand" style="flex:1 1 220px">Dentist's final call
+              <select id="drBand"><option value="agree">Agree with Exostan</option><option value="Easy">Easy</option><option value="Moderate">Moderate</option><option value="Difficult">Difficult</option><option value="Refer to OMFS">Refer to OMFS</option></select>
+            </label>
+          </div>
+          <label class="verify" id="verifyBox" for="verified" style="margin-top:12px">
+            <input type="checkbox" id="verified">
+            <span>I have reviewed the landmarks, signs and findings on this radiograph and confirm this assessment.</span>
+          </label>
+        </section>
+
+        <section class="panel sec" aria-label="Reports and exports">
+          <h2>Reports</h2>
+          <div class="exports">
+            <button id="pdfDr" class="primary" type="button"><b>Dentist PDF</b><span>Full analysis, image, actions</span></button>
+            <button id="pdfPt" type="button"><b>Patient PDF</b><span>Plain language, next steps</span></button>
+            <button id="aiSum" type="button"><b>Write AI summary</b><span>Narrative for both reports</span></button>
+            <button id="saveCase" type="button"><b>Save to case library</b><span>Adds to Exostan learning</span></button>
+            <button id="emailPt" type="button"><b>Email to patient</b><span>Copy ready text</span></button>
+            <button id="emailRef" type="button"><b>Referral letter</b><span>Copy for OMFS referral</span></button>
+            <button id="copyJson" type="button"><b>Patient log record</b><span>Copy JSON for the records API</span></button>
+            <button id="sendApi" type="button" disabled><b>Send to patient file</b><span>API not connected yet</span></button>
+          </div>
+          <p class="msg" id="exportMsg" aria-live="polite"></p>
+          <pre class="report" id="report">No assessment yet.</pre>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ PATIENT VIEW ============ -->
+  <section id="pane-patient" role="tabpanel" aria-labelledby="tab-patient" hidden>
+    <article class="panel patient" id="patientView"></article>
+  </section>
+
+  <!-- ============ LIBRARY ============ -->
+  <section id="pane-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+    <div class="side">
+      <section class="panel sec">
+        <h2>How Exostan learns</h2>
+        <div class="stat" id="libStats"></div>
+        <p class="note" style="margin-top:10px">Every saved case is stored without patient identity. When you record the surgical outcome (actual difficulty, CBCT result, nerve outcome), Exostan compares it with its prediction. Once there are 5 outcomes it adds a similar-case estimate to the difficulty score. Once there are 20 CBCT-verified cases it refits the IAN weights on your own data. Rules and literature weights stay in charge until the data is large enough.</p>
+      </section>
+      <section class="panel sec">
+        <h2>Cases <button id="copyCsv" type="button" style="text-transform:none;letter-spacing:0">Copy as CSV</button></h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Case</th><th>Date</th><th>Tooth</th><th>Winter</th><th>Depth / ramus</th><th class="num">Diff</th><th class="num">IAN</th><th>Dentist call</th><th>Outcome</th><th></th></tr></thead>
+          <tbody id="libBody"><tr><td colspan="10" class="muted">No saved cases yet. Assess an OPG, verify it, then press Save to case library.</td></tr></tbody>
+        </table></div>
+        <p class="msg" id="libMsg" aria-live="polite"></p>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============ KNOWLEDGE BASE ============ -->
+  <section id="pane-kb" role="tabpanel" aria-labelledby="tab-kb" hidden>
+    <div class="kb" id="kb"></div>
+  </section>
+
+  <div class="warnbox">
+    Decision support prototype. Angulation, depth and ramus relation are measured from verified landmarks and scored with the Pederson index. IAN likelihood combines root to canal distance with Rood and Shehab signs weighted by published likelihood ratios. A panoramic radiograph cannot rule out nerve contact; CBCT is the reference standard. The treating dentist remains responsible for every clinical decision.
+  </div>
+</div>
+<canvas id="loupe" width="170" height="170" hidden></canvas>
+
+<script>
+(function(){
+"use strict";
+/* ================= DATA ================= */
+const LM = [
+  {id:'m1c',  name:'M1 cusp tip',          hint:'Occlusal surface of the first molar. Sets the occlusal plane.'},
+  {id:'m2c',  name:'M2 cusp tip',          hint:'Occlusal centre of the second molar. Second point of the occlusal plane.'},
+  {id:'m2a',  name:'M2 root apex',         hint:'Midpoint between the M2 root apices. Gives the M2 long axis.'},
+  {id:'m2cej',name:'M2 distal CEJ',        hint:'Cervical line on the distal side of the second molar. Depth reference for Level B and C.'},
+  {id:'m2d',  name:'M2 distal surface',    hint:'Point on the distal surface of M2 facing the third molar.'},
+  {id:'m3top',name:'M3 highest point',     hint:'Highest point of the third molar crown relative to the occlusal plane.'},
+  {id:'m3c',  name:'M3 occlusal centre',   hint:'Centre of the third molar occlusal surface. Top of the M3 long axis.'},
+  {id:'m3a',  name:'M3 root apex',         hint:'Midpoint between the M3 apices, or the apex closest to the canal.'},
+  {id:'m3m',  name:'M3 most mesial point', hint:'Most mesial point of the third molar crown.'},
+  {id:'m3d',  name:'M3 most distal point', hint:'Most distal point of the third molar crown.'},
+  {id:'ramus',name:'Ramus anterior border',hint:'Anterior border of the ramus at the level of the occlusal plane.'},
+  {id:'ian',  name:'IAN canal roof',       hint:'Upper white line of the mandibular canal nearest the M3 apex.'}
+];
+// Likelihood ratios: Atieh 2010 pooled meta-analysis (darkening, white line, diversion);
+// others derived from sensitivity and specificity vs CBCT (PMC7109491). Bifid apex not predictive.
+const ROOD = [
+  {id:'darkRoot',   name:'Darkening of the root',        lr:4.26, kind:'Root'},
+  {id:'diversion',  name:'Diversion of the canal',       lr:5.49, kind:'Canal'},
+  {id:'whiteLine',  name:'Interruption of the white line',lr:2.05, kind:'Canal'},
+  {id:'narrowRoot', name:'Narrowing of the root',        lr:2.60, kind:'Root'},
+  {id:'narrowCanal',name:'Narrowing of the canal',       lr:2.01, kind:'Canal'},
+  {id:'deflect',    name:'Deflection of the root',       lr:1.82, kind:'Root'},
+  {id:'bifid',      name:'Dark and bifid apex',          lr:1.00, kind:'Root'}
+];
+const ACTIONS = [
+  {id:'cbct', name:'CBCT requested'},
+  {id:'refer', name:'Referred to oral and maxillofacial surgeon'},
+  {id:'sched', name:'Surgical extraction scheduled'},
+  {id:'corona', name:'Coronectomy discussed'},
+  {id:'consent', name:'Consent obtained incl. nerve injury risk'},
+  {id:'analg', name:'Analgesia prescribed'},
+  {id:'abx', name:'Antibiotics prescribed'},
+  {id:'postop', name:'Post-operative instructions given'},
+  {id:'review', name:'Review appointment booked'}
+];
+const BAND_PCT = {'Easy':12,'Moderate':38,'Difficult':63,'Very difficult':88};
+
+/* ================= STATE ================= */
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d'), stage = $('stage');
+let img = null, srcW = 0, srcH = 0;
+let pts = LM.map(()=>null), src = LM.map(()=>null); // src: 'ai' | 'dr'
+let sel = -1, dragIdx = -1, dragged = false;
+let last = null, aiSuggest = {rood:{}, roots:null}, aiSummary = null, aiRegion = null;
+let cases = [];      // from db
+let caps = {db:null, user:null, sample:null, downloads:null, perms:null, sampleImages:null, imagesConfirmedNo:false};
+let permState = {}; let capsReady = false;
+let myId = null;
+
+/* ================= UI SCAFFOLD ================= */
+const stepsEl = $('steps');
+LM.forEach((l,i)=>{
+  const li = document.createElement('li');
+  li.innerHTML = '<span class="dot">'+(i+1)+'</span><span>'+l.name+'</span>';
+  li.addEventListener('click',()=>{ sel = (sel===i ? -1 : i); refresh(); cv.focus({preventScroll:true}); scrollToPoint(i); });
+  stepsEl.appendChild(li);
+});
+$('rood').innerHTML = ROOD.map(r=>'<label><input type="checkbox" id="r_'+r.id+'"> <span>'+r.name+'<span class="chip" id="ai_'+r.id+'" hidden>AI</span></span></label>').join('');
+$('actions').innerHTML = ACTIONS.map(a=>'<label><input type="checkbox" id="a_'+a.id+'"> <span>'+a.name+'</span></label>').join('');
+ROOD.forEach(r=>$('r_'+r.id).addEventListener('change',()=>{ $('ai_'+r.id).hidden = true; unverify(); refresh(); }));
+['roots','contactOv','crownMm','tooth','angOv','drBand'].forEach(id=>$(id).addEventListener('input',()=>{unverify(); refresh();}));
+['bright','contrast'].forEach(id=>$(id).addEventListener('input',draw));
+$('zoom').addEventListener('input',applyZoom);
+['drName','clinic','ptName','ptFile','caseDate','obs','otherAct'].forEach(id=>$(id).addEventListener('input',refreshTextOnly));
+ACTIONS.forEach(a=>$('a_'+a.id).addEventListener('change',refreshTextOnly));
+$('verified').addEventListener('change',()=>{ $('verifyBox').classList.toggle('ok',$('verified').checked); refresh(); });
+$('caseDate').value = new Date().toISOString().slice(0,10);
+
+document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>{ const on = x===b; x.setAttribute('aria-selected',on); $(x.getAttribute('aria-controls')).hidden = !on; });
+  if (b.id==='tab-patient') renderPatient();
+  if (b.id==='tab-assess') draw();
+}));
+function unverify(){ if ($('verified').checked){ $('verified').checked=false; $('verifyBox').classList.remove('ok'); } aiSummary = null; }
+
+/* ================= GEOMETRY ================= */
+const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y}), dot=(a,b)=>a.x*b.x+a.y*b.y, len=a=>Math.hypot(a.x,a.y);
+const norm=a=>{const l=len(a)||1;return {x:a.x/l,y:a.y/l};};
+const P = id => pts[LM.findIndex(l=>l.id===id)];
+const sig = x => 1/(1+Math.exp(-x));
+
+function features(){
+  if (pts.some(p=>!p)) return null;
+  const m1c=P('m1c'), m2c=P('m2c'), m2a=P('m2a'), m2cej=P('m2cej'), m2d=P('m2d'),
+        m3top=P('m3top'), m3c=P('m3c'), m3a=P('m3a'), m3m=P('m3m'), m3d=P('m3d'), ramus=P('ramus'), ian=P('ian');
+  const crownPx = len(sub(m3m,m3d)) || 1;
+  const pxPerMm = crownPx / (parseFloat($('crownMm').value)||10);
+  const u0 = norm(sub(m2c,m1c));
+  let n = {x:-u0.y, y:u0.x};
+  if (dot(sub(m2a,m2c),n) < 0) n = {x:-n.x,y:-n.y};
+  const mu = dot(sub(m2c,ramus),u0) >= 0 ? u0 : {x:-u0.x,y:-u0.y};
+  const u = {x:-mu.x, y:-mu.y}, up = {x:-n.x, y:-n.y};
+  const wrap = a => ((a+180)%360+360)%360-180;
+  const tilt = v => Math.atan2(dot(v,mu), dot(v,up))*180/Math.PI;
+  let v2 = sub(m2c,m2a); if (dot(v2,up) < 0) v2 = {x:-v2.x,y:-v2.y};
+  let theta = wrap(tilt(sub(m3c,m3a)) - tilt(v2));
+  if (Math.abs(theta) > 110) theta = wrap(theta+180);
+  let wAuto = Math.abs(theta)<=10 ? 'Vertical' : Math.abs(theta)>=80 ? 'Horizontal' : theta>0 ? 'Mesioangular' : 'Distoangular';
+  const depthOf = p => dot(sub(p,m2c),n);
+  const dTop = depthOf(m3top), dCej = depthOf(m2cej);
+  const level = dTop <= 0.5*pxPerMm ? 'Level A' : dTop <= dCej ? 'Level B' : 'Level C';
+  const ratio = dot(sub(ramus,m2d),u) / crownPx;
+  const ramusCls = ratio >= 1 ? 'Class I' : ratio >= 0.5 ? 'Class II' : 'Class III';
+  const gapMm = len(sub(m3m,m2d))/pxPerMm;
+  const distMm = (depthOf(ian) - depthOf(m3a))/pxPerMm;
+  return {theta,wAuto,level,dTopMm:dTop/pxPerMm,ramusCls,ratio,gapMm,distMm,geo:{m2c,u,n,m2cej,m3a,ian,m2d,ramus,m3c,pxPerMm}};
+}
+
+/* ---------- learned models from the case library ---------- */
+function vec(c){ return [ {Vertical:3,Mesioangular:1,Horizontal:2,Distoangular:4}[c.winter]/4, ({'Level A':1,'Level B':2,'Level C':3}[c.level])/3,
+  ({'Class I':1,'Class II':2,'Class III':3}[c.ramus])/3, c.contact?1:0, (c.ianPct||0)/100, (c.roots||0)/2 ]; }
+function knnDifficulty(cur){
+  const done = cases.filter(c=>c.outcome && c.outcome.difficulty && BAND_PCT[c.outcome.difficulty]!=null);
+  if (done.length < 5) return {n:done.length, pct:null, near:[]};
+  const v = vec(cur);
+  const scored = done.map(c=>{ const w=vec(c); const d=Math.sqrt(w.reduce((s,x,i)=>s+(x-v[i])**2,0)); return {c,d}; }).sort((a,b)=>a.d-b.d).slice(0,5);
+  let sw=0, s=0; scored.forEach(o=>{ const w=1/(o.d+0.1); sw+=w; s+=w*BAND_PCT[o.c.outcome.difficulty]; });
+  return {n:done.length, pct:Math.round(s/sw), near:scored.map(o=>o.c)};
+}
+function ianFeat(distMm, signs){ return [1, Math.max(-6,Math.min(8,distMm))].concat(ROOD.map(r=>signs.includes(r.id)?1:0)); }
+function fitIan(){
+  const d = cases.filter(c=>c.outcome && (c.outcome.cbct==='contact'||c.outcome.cbct==='none') && typeof c.distMm==='number');
+  if (d.length < 20) return {n:d.length, w:null};
+  const X = d.map(c=>ianFeat(c.distMm, c.signs||[])), y = d.map(c=>c.outcome.cbct==='contact'?1:0);
+  let w = new Array(X[0].length).fill(0); const lr=0.1, lam=0.05;
+  for (let it=0; it<600; it++){
+    const g = new Array(w.length).fill(0);
+    X.forEach((x,i)=>{ const p=sig(x.reduce((s,v,j)=>s+v*w[j],0)); x.forEach((v,j)=>g[j]+=(p-y[i])*v); });
+    w = w.map((wj,j)=>wj - lr*(g[j]/X.length + (j?lam*wj:0)));
+  }
+  return {n:d.length, w};
+}
+
+function compute(){
+  const f = features(); if (!f) return null;
+  const angOv = $('angOv').value, winter = angOv==='auto' ? f.wAuto : angOv;
+  const wPts = {Vertical:3,Mesioangular:1,Horizontal:2,Distoangular:4}[winter];
+  const lPts = {'Level A':1,'Level B':2,'Level C':3}[f.level];
+  const rPts = {'Class I':1,'Class II':2,'Class III':3}[f.ramusCls];
+  const cOv = $('contactOv').value, contact = cOv==='auto' ? f.gapMm < 1.0 : cOv==='yes';
+  const signs = ROOD.filter(r=>$('r_'+r.id).checked).map(r=>r.id);
+  // IAN: geometric prior from apex to canal distance, updated by sign likelihood ratios (damped 0.8 for correlated signs)
+  let logit = -1.5*(f.distMm - 1.0);
+  signs.forEach(id=>{ logit += 0.8*Math.log(ROOD.find(r=>r.id===id).lr); });
+  const ianRule = sig(logit);
+  const fit = fitIan();
+  let ianP = ianRule, ianLearned = null;
+  if (fit.w){ ianLearned = sig(ianFeat(f.distMm,signs).reduce((s,v,j)=>s+v*fit.w[j],0)); const wt=Math.min(0.7, fit.n/60); ianP = (1-wt)*ianRule + wt*ianLearned; }
+  const ianNear = ianP >= 0.5;
+  const rootPts = parseInt($('roots').value,10);
+  const pdi = wPts + lPts + rPts;
+  const total = pdi + (contact?1:0) + (ianNear?1:0) + rootPts;
+  const rulePct = Math.round((total-3)/11*100);
+  const cur = {winter, level:f.level, ramus:f.ramusCls, contact, ianPct:ianP*100, roots:rootPts};
+  const knn = knnDifficulty(cur);
+  let diffPct = rulePct;
+  if (knn.pct!=null){ const wt = Math.min(0.6, knn.n/50); diffPct = Math.round((1-wt)*rulePct + wt*knn.pct); }
+  const band = diffPct < 25 ? 'Easy' : diffPct < 50 ? 'Moderate' : diffPct < 75 ? 'Difficult' : 'Refer to OMFS';
+  const cls = {Easy:'ok',Moderate:'warn',Difficult:'bad','Refer to OMFS':'refer'}[band];
+  const pdiBand = pdi<=4 ? 'slightly difficult' : pdi<=6 ? 'moderately difficult' : 'very difficult';
+  const flags = [];
+  if (winter==='Distoangular'||winter==='Horizontal') flags.push(winter.toLowerCase()+' angulation');
+  if (f.ramusCls==='Class III') flags.push('Class III ramus');
+  if (ianNear) flags.push('near IAN');
+  if (contact) flags.push('contact with M2');
+  const drBand = $('drBand').value;
+  const finalBand = drBand==='agree' ? band : drBand;
+  const finalCls = {Easy:'ok',Moderate:'warn',Difficult:'bad','Refer to OMFS':'refer'}[finalBand];
+  const ianPct = Math.round(ianP*100);
+  const ianCls = ianPct>=70?'bad':ianPct>=40?'warn':'ok';
+  const ianBand = ianPct>=70?'High':ianPct>=40?'Moderate':'Low';
+  // recommendations
+  const next = [];
+  if (finalBand==='Refer to OMFS' || (ianPct>=70 && diffPct>=50)) next.push('Refer to an oral and maxillofacial surgeon.');
+  else if (finalBand==='Difficult') next.push('Plan a surgical extraction with bone removal and tooth sectioning.');
+  else if (finalBand==='Moderate') next.push('Manageable in general practice with surgical preparation and adequate time.');
+  else next.push('Routine extraction expected.');
+  if (ianPct>=40) next.push('Obtain a CBCT to confirm the root to canal relation before surgery.');
+  if (ianPct>=70) next.push('Discuss coronectomy as an option if CBCT confirms contact.');
+  if (ianPct>=40 || finalBand!=='Easy') next.push('Document informed consent covering nerve injury, which can cause temporary or rarely permanent numbness of the lip and chin.');
+  if (contact) next.push('Protect the distal surface of 37 during elevation and check it for caries or resorption.');
+  return {...f, winter, angOv, wPts, lPts, rPts, contact, signs, ianRule, ianLearned, ianFit:fit, ianP, ianPct, ianNear, ianCls, ianBand,
+    rootPts, pdi, pdiBand, total, rulePct, knn, diffPct, band, cls, flags, drBand, finalBand, finalCls, next};
+}
+
+/* ================= DRAWING ================= */
+function applyZoom(){ cv.style.width = (parseFloat($('zoom').value)*100)+'%'; draw(); }
+function uiScale(){ return cv.width / (cv.clientWidth || cv.width); }
+function draw(){
+  const b = $('bright').value, c = $('contrast').value;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
+  if (img){ ctx.filter = 'brightness('+b+'%) contrast('+c+'%)'; ctx.drawImage(img,0,0,cv.width,cv.height); ctx.filter='none'; }
+  drawOverlay(ctx, uiScale(), true);
+  if (!img){
+    const k=uiScale(); ctx.fillStyle='rgba(255,255,255,.72)'; ctx.font=Math.round(18*k)+'px IBM Plex Sans, sans-serif'; ctx.textAlign='center';
+    ctx.fillText('Upload an OPG or open the sample case',cv.width/2,cv.height/2); ctx.textAlign='start';
+  }
+}
+function drawOverlay(g, k, withLabels){
+  const r = last;
+  const line=(a,b,col,wd,dash)=>{g.save();g.strokeStyle=col;g.lineWidth=wd*k;g.setLineDash(dash?dash.map(d=>d*k):[]);g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.stroke();g.restore();};
+  const ext=(a,b,f)=>{const d=sub(b,a);return [{x:a.x-d.x*f,y:a.y-d.y*f},{x:b.x+d.x*f,y:b.y+d.y*f}];};
+  if (aiRegion && withLabels){ g.save(); g.strokeStyle='rgba(242,169,59,.6)'; g.setLineDash([10*k,8*k]); g.lineWidth=1.5*k; g.strokeRect(aiRegion.x,aiRegion.y,aiRegion.w,aiRegion.h); g.restore(); }
+  if (P('m1c')&&P('m2c')){ const e=ext(P('m1c'),P('m2c'),3); line(e[0],e[1],'rgba(120,200,255,.75)',1.5,[8,6]); }
+  if (P('m2c')&&P('m2a')){ const e=ext(P('m2a'),P('m2c'),.35); line(e[0],e[1],'rgba(255,210,90,.9)',2); }
+  if (P('m3c')&&P('m3a')){ const e=ext(P('m3a'),P('m3c'),.35); line(e[0],e[1],'rgba(255,120,120,.95)',2); }
+  if (P('m3m')&&P('m3d')) line(P('m3m'),P('m3d'),'rgba(180,255,180,.85)',1.5,[4,4]);
+  if (r){
+    const G=r.geo, off=dot(sub(G.m2cej,G.m2c),G.n), base={x:G.m2c.x+G.n.x*off,y:G.m2c.y+G.n.y*off}, L=cv.width;
+    line({x:base.x-G.u.x*L,y:base.y-G.u.y*L},{x:base.x+G.u.x*L,y:base.y+G.u.y*L},'rgba(120,200,255,.45)',1,[3,6]);
+    const sp=dot(sub(G.ramus,G.m2d),G.u); line(G.m2d,{x:G.m2d.x+G.u.x*sp,y:G.m2d.y+G.u.y*sp},'rgba(200,170,255,.95)',2);
+    const dd=dot(sub(G.ian,G.m3a),G.n); line(G.m3a,{x:G.m3a.x+G.n.x*dd,y:G.m3a.y+G.n.y*dd}, r.ianNear?'rgba(255,90,90,1)':'rgba(120,230,160,1)',2.5);
+    g.save(); g.font='600 '+Math.round(15*k)+'px IBM Plex Mono, monospace'; g.fillStyle='rgba(255,255,255,.95)'; g.strokeStyle='rgba(0,0,0,.75)'; g.lineWidth=3*k;
+    const t=r.theta.toFixed(0)+'° '+r.winter; g.strokeText(t,G.m3c.x+12*k,G.m3c.y-12*k); g.fillText(t,G.m3c.x+12*k,G.m3c.y-12*k); g.restore();
+  }
+  pts.forEach((p,i)=>{
+    if(!p) return;
+    g.save(); g.beginPath(); g.arc(p.x,p.y,7*k,0,Math.PI*2);
+    g.fillStyle = (i===sel||i===dragIdx) ? '#FFD35A' : src[i]==='ai' ? '#F2A93B' : '#4FB3FF'; g.fill();
+    g.lineWidth=2*k; g.strokeStyle='#08121A'; g.stroke();
+    if (i===sel){ g.beginPath(); g.arc(p.x,p.y,13*k,0,Math.PI*2); g.strokeStyle='#FFD35A'; g.lineWidth=1.5*k; g.stroke(); }
+    g.font='600 '+Math.round(11*k)+'px IBM Plex Mono, monospace'; g.fillStyle='#fff'; g.strokeStyle='rgba(0,0,0,.8)'; g.lineWidth=3*k;
+    g.strokeText(String(i+1),p.x+9*k,p.y-8*k); g.fillText(String(i+1),p.x+9*k,p.y-8*k); g.restore();
+  });
+}
+
+/* ================= RESULTS ================= */
+function setScore(pre,pct,band,cls){
+  $(pre+'Val').innerHTML = (pct==null?'–':pct)+'<small>%</small>';
+  $(pre+'Val').className = 'val'+(cls?' t-'+cls:'');
+  const bar=$(pre+'Bar'); bar.style.width=(pct||0)+'%'; bar.style.background = cls?'var(--'+cls+')':'var(--accent)';
+  const b=$(pre+'Band'); b.textContent=band; b.className='pill'+(cls?' c-'+cls:'');
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function refresh(){
+  const next = pts.findIndex(p=>!p);
+  [...stepsEl.children].forEach((li,i)=>{ li.className = (pts[i]?(src[i]==='ai'?'done ai':'done'):(i===next?'cur':'')) + (i===sel?' sel':''); });
+  $('toothLabel').textContent = $('tooth').value;
+  if (sel>=0){ $('pN').textContent='Edit '+(sel+1); $('pName').textContent=LM[sel].name; $('pHint').textContent='Click the image to move it here, drag it, or nudge with the arrow keys (Shift for bigger steps). '+LM[sel].hint; }
+  else if (next>=0){ $('pN').textContent=(next+1)+'/12'; $('pName').textContent=LM[next].name; $('pHint').textContent=LM[next].hint; }
+  else { const nAi = src.filter(s=>s==='ai').length; $('pN').textContent='12/12'; $('pName').textContent= nAi ? 'Awaiting your approval' : 'Landmarks approved'; $('pHint').textContent= nAi ? 'Amber points were placed by AI. Drag any that are off, then press Approve landmarks.' : 'Scores update live if you refine a point.'; }
+  last = compute();
+  const r = last, body = $('clsBody');
+  if (!r){
+    setScore('diff',null,'Awaiting landmarks',null); setScore('ian',null,'Awaiting landmarks',null);
+    $('diffSub').textContent=''; $('ianSub').textContent=''; $('learnTag').textContent='';
+    $('verdict').textContent = aiBusy ? 'Detecting landmarks on the radiograph...' : 'Upload an OPG. Exostan detects the landmarks automatically.';
+    $('verdict').style.borderLeftColor='var(--muted)'; $('similar').hidden = true;
+    body.innerHTML='<tr><td colspan="4" class="muted">Classification appears once all landmarks are placed.</td></tr>';
+    $('totalPts').textContent='–'; $('paperRule').textContent='';
+    gateExports(); refreshTextOnly(); draw(); return;
+  }
+  setScore('diff',r.diffPct,r.band,r.cls); setScore('ian',r.ianPct,r.ianBand+(r.ianPct>=40?' · CBCT advised':''),r.ianCls);
+  $('diffSub').textContent = r.knn.pct!=null ? 'Rules '+r.rulePct+'% · similar cases '+r.knn.pct+'%' : 'Rules-based (Pederson + modifiers)';
+  $('ianSub').textContent = r.ianLearned!=null ? 'Literature '+Math.round(r.ianRule*100)+'% · learned '+Math.round(r.ianLearned*100)+'%' : 'Distance + Rood sign likelihood ratios';
+  $('learnTag').textContent = cases.length ? 'learning from '+cases.length+' case'+(cases.length>1?'s':'') : '';
+  const rows = [
+    ['Angulation (Winter)', r.winter+(r.angOv!=='auto'?' <span class="muted">(dentist; auto '+r.wAuto+')</span>':''), r.theta.toFixed(0)+'°', r.wPts],
+    ['Depth (Pell & Gregory)', r.level, (r.dTopMm>=0?'+':'')+r.dTopMm.toFixed(1)+' mm', r.lPts],
+    ['Ramus (Pell & Gregory)', r.ramusCls, Math.round(r.ratio*100)+'% of crown', r.rPts],
+    ['Contact with M2', r.contact?'Contact':'No contact', r.gapMm.toFixed(1)+' mm gap', r.contact?'+1':'0'],
+    ['IAN proximity', r.ianNear?'Near':'Far', (r.distMm>=0?'':'overlap ')+Math.abs(r.distMm).toFixed(1)+' mm', r.ianNear?'+1':'0'],
+    ['Root morphology', ['Fused or conical','Multiple or divergent','Curved or hooked'][r.rootPts], '', r.rootPts?'+'+r.rootPts:'0']
+  ];
+  body.innerHTML = rows.map(x=>'<tr><td>'+x[0]+'</td><td>'+x[1]+'</td><td class="num">'+x[2]+'</td><td class="num">'+x[3]+'</td></tr>').join('');
+  $('totalPts').textContent = r.pdi+' + '+(r.total-r.pdi)+' = '+r.total;
+  $('paperRule').innerHTML = '<strong>Exostan paper rule:</strong> '+(r.flags.length?'<span class="t-bad">Difficult</span>, flagged for '+r.flags.join(', ')+'.':'<span class="t-ok">Easy</span>, no red-path factors.');
+  $('paperRule').style.borderLeftColor = r.flags.length?'var(--bad)':'var(--ok)';
+  $('verdict').innerHTML = '<strong>'+esc(r.finalBand)+(r.drBand!=='agree'?' (dentist\'s call; Exostan said '+esc(r.band)+')':'')+'.</strong> Pederson index '+r.pdi+' ('+r.pdiBand+'). '+r.next.map(esc).join(' ');
+  $('verdict').style.borderLeftColor='var(--'+r.finalCls+')';
+  if (r.knn.near.length){
+    const counts={}; r.knn.near.forEach(c=>counts[c.outcome.difficulty]=(counts[c.outcome.difficulty]||0)+1);
+    const mins = r.knn.near.map(c=>c.outcome.minutes).filter(x=>x>0);
+    $('similar').hidden=false;
+    $('similar').innerHTML = '<strong>5 most similar past cases:</strong> '+Object.entries(counts).map(([k,v])=>v+' '+k.toLowerCase()).join(', ')+(mins.length?'; average surgery time '+Math.round(mins.reduce((a,b)=>a+b,0)/mins.length)+' min':'')+'.';
+    $('similar').style.borderLeftColor='var(--accent)';
+  } else $('similar').hidden = true;
+  gateExports(); refreshTextOnly(); draw();
+}
+function gateExports(){
+  const ready = !!last && $('verified').checked && src.every(s=>s!=='ai');
+  const reason = !last ? 'Place all 12 landmarks first.' : src.some(s=>s==='ai') ? 'Approve the AI landmarks first (Approve landmarks, above the image).' : !$('verified').checked ? 'Tick the dentist confirmation to unlock reports.' : '';
+  ['pdfDr','pdfPt','saveCase','emailPt','emailRef','copyJson'].forEach(id=>$(id).disabled = !ready);
+  $('pdfDr').disabled = $('pdfPt').disabled = !ready || !caps.downloads || !window.jspdf;
+  $('aiSum').disabled = !last || !caps.sample;
+  $('saveCase').disabled = !ready || !caps.db;
+  $('verified').disabled = !last || src.some(s=>s==='ai');
+  let m = reason;
+  if (ready && !caps.downloads) m = 'PDF export works when this page is opened in Claude.';
+  $('exportMsg').textContent = m;
+}
+
+/* ================= TEXT OUTPUTS ================= */
+function ctxInfo(){
+  return {dr:$('drName').value.trim(), clinic:$('clinic').value.trim(), pt:$('ptName').value.trim(), file:$('ptFile').value.trim(),
+    date:$('caseDate').value, tooth:$('tooth').value, obs:$('obs').value.trim(),
+    actions:ACTIONS.filter(a=>$('a_'+a.id).checked).map(a=>a.name).concat($('otherAct').value.trim()?[$('otherAct').value.trim()]:[])};
+}
+function fmtDate(d){ if(!d) return ''; const t=new Date(d+'T12:00:00'); return isNaN(t)?d:t.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}); }
+function doctorText(){
+  const r=last, c=ctxInfo(); if(!r) return 'No assessment yet.';
+  const signs = r.signs.length ? r.signs.map(id=>ROOD.find(x=>x.id===id).name.toLowerCase()).join(', ') : 'none';
+  return `EXOSTAN clinical assessment
+Dentist: ${c.dr||'-'}   Clinic: ${c.clinic||'-'}
+Patient: ${c.pt||'-'}   File: ${c.file||'-'}   Date: ${fmtDate(c.date)}
+Tooth: ${c.tooth}
+
+Extraction difficulty: ${r.diffPct}% (${r.band})${r.drBand!=='agree'?'\nDentist final call: '+r.finalBand:''}
+IAN contact likelihood: ${r.ianPct}% (${r.ianBand})
+
+Angulation (Winter): ${r.winter}, ${r.theta.toFixed(0)}°
+Depth (Pell & Gregory): ${r.level}
+Ramus relation (Pell & Gregory): ${r.ramusCls}
+Contact with M2: ${r.contact?'Yes':'No'} (${r.gapMm.toFixed(1)} mm)
+Apex to canal: ${r.distMm>=0?r.distMm.toFixed(1)+' mm above canal roof':'overlaps canal by '+Math.abs(r.distMm).toFixed(1)+' mm'}
+Rood and Shehab signs: ${signs}
+Root morphology: ${['fused or conical','multiple or divergent','curved or hooked'][r.rootPts]}
+Pederson index: ${r.pdi} (${r.pdiBand}); total with modifiers ${r.total}/14
+
+Clinical observations: ${c.obs||'none recorded'}
+Actions taken: ${c.actions.length?c.actions.join('; '):'none recorded'}
+
+Next steps:
+${r.next.map(x=>'- '+x).join('\n')}
+${aiSummary?'\nSummary: '+aiSummary.doctor_summary:''}
+Verified by dentist: ${$('verified').checked?'Yes':'Not yet'}`;
+}
+function refreshTextOnly(){ $('report').textContent = doctorText(); }
+
+function plain(r){
+  const diff = {Easy:'This tooth should come out in a straightforward way, similar to a routine extraction.',
+    Moderate:'Removing this tooth needs a small surgical procedure. It is common and usually done in the dental chair under local anaesthetic.',
+    Difficult:'This tooth sits deep or at an angle, so removal needs a surgical procedure. Your dentist may need to remove some bone and take the tooth out in pieces.',
+    'Refer to OMFS':'This tooth is complex to remove. Your dentist recommends a specialist oral surgeon for the procedure.'}[r.finalBand];
+  const nerve = r.ianPct>=70 ? 'The roots of this tooth appear very close to the nerve that gives feeling to your lower lip and chin. A 3D scan (CBCT) is recommended to check this before any surgery.'
+    : r.ianPct>=40 ? 'The roots may be close to the nerve that gives feeling to your lower lip and chin. Your dentist may ask for a 3D scan (CBCT) to check.'
+    : 'The roots do not appear close to the nerve that gives feeling to your lower lip and chin.';
+  const steps = [];
+  const a = ctxInfo().actions;
+  if (a.includes('CBCT requested') || r.ianPct>=40) steps.push('Have a 3D scan (CBCT) of the area so the nerve position can be checked.');
+  if (a.includes('Referred to oral and maxillofacial surgeon') || r.finalBand==='Refer to OMFS') steps.push('See an oral and maxillofacial surgeon, who will plan the removal with you.');
+  if (a.includes('Surgical extraction scheduled')) steps.push('Attend your booked appointment for the extraction.');
+  if (a.includes('Coronectomy discussed')) steps.push('Consider coronectomy, where only the crown is removed and the roots stay in place to protect the nerve.');
+  if (a.includes('Antibiotics prescribed')) steps.push('Take the antibiotics exactly as prescribed and finish the course.');
+  if (a.includes('Analgesia prescribed')) steps.push('Use the pain relief as directed.');
+  if (a.includes('Review appointment booked')) steps.push('Come back for your review appointment.');
+  if (!steps.length) steps.push('Your dentist will book the extraction and explain how to prepare.');
+  return {diff, nerve, steps};
+}
+function renderPatient(){
+  const el = $('patientView'), r = last, c = ctxInfo();
+  if (!r){ el.innerHTML = '<h2>Patient view</h2><p class="muted">Complete the assessment on the Assess tab to see the patient version here.</p>'; return; }
+  const p = plain(r), order = ['Easy','Moderate','Difficult','Refer to OMFS'], labels=['Simple','Moderate','Complex','Specialist'];
+  const summ = aiSummary && aiSummary.patient_summary ? '<p>'+esc(aiSummary.patient_summary)+'</p>' : '';
+  el.innerHTML = `
+    <div><p class="muted">${esc(c.clinic||'Exostan report')} · ${esc(fmtDate(c.date))}</p>
+    <h2>Your wisdom tooth assessment${c.pt?', '+esc(c.pt):''}</h2>
+    <p class="muted">Lower ${c.tooth==='38'?'left':'right'} wisdom tooth (${c.tooth}) · reviewed by ${esc(c.dr||'your dentist')}</p></div>
+    ${summ}
+    <div><h3>How complex is the removal?</h3><p>${esc(p.diff)}</p>
+      <div class="scale">${order.map((b,i)=>'<div class="'+(b===r.finalBand?'on c-'+{Easy:'ok',Moderate:'warn',Difficult:'bad','Refer to OMFS':'refer'}[b]:'')+'">'+labels[i]+'</div>').join('')}</div></div>
+    <div><h3>The nerve near your tooth</h3><p>${esc(p.nerve)}</p></div>
+    <div><h3>What happens next</h3><ul>${p.steps.map(s=>'<li>'+esc(s)+'</li>').join('')}</ul></div>
+    <div><h3>After the extraction</h3><ul><li>Some swelling and discomfort for 3 to 5 days is normal.</li><li>Bite on gauze for 30 minutes and avoid rinsing, smoking or hot drinks for the first day.</li><li>Call the clinic if bleeding does not stop, pain gets worse after day 3, or your lip or chin still feels numb the next day.</li></ul></div>
+    <div><h3>Questions you can ask</h3><ul><li>Do I need a 3D scan before the extraction?</li><li>Who will do the procedure, and where?</li><li>What are the risks for my tooth in particular?</li><li>How long will recovery take and when can I return to work?</li></ul></div>
+    <p class="note">This summary supports the conversation with your dentist and does not replace it.</p>`;
+}
+
+/* ================= POINTER + KEYBOARD ================= */
+function toImg(e){ const rc = cv.getBoundingClientRect(); return {x:(e.clientX-rc.left)*cv.width/rc.width, y:(e.clientY-rc.top)*cv.height/rc.height}; }
+const loupe = $('loupe'), lctx = loupe.getContext('2d');
+function showLoupe(e,p){
+  loupe.hidden=false; const z=3, s=170;
+  loupe.style.left = Math.min(window.innerWidth-180, e.clientX+24)+'px';
+  loupe.style.top = Math.max(8, e.clientY-200)+'px';
+  const k = uiScale(), srcSize = s/z*k;
+  lctx.fillStyle='#000'; lctx.fillRect(0,0,s,s);
+  lctx.drawImage(cv, p.x-srcSize/2, p.y-srcSize/2, srcSize, srcSize, 0,0,s,s);
+  lctx.strokeStyle='#FFD35A'; lctx.lineWidth=1; lctx.beginPath(); lctx.moveTo(s/2,0); lctx.lineTo(s/2,s); lctx.moveTo(0,s/2); lctx.lineTo(s,s/2); lctx.stroke();
+}
+cv.addEventListener('pointerdown',e=>{
+  if(!img) return;
+  const p = toImg(e), k=uiScale();
+  let best=-1, bd=24*k;
+  pts.forEach((q,i)=>{ if(q){const d=len(sub(q,p)); if(d<bd){bd=d;best=i;}}});
+  if (best>=0){ dragIdx=best; sel=best; dragged=false; cv.setPointerCapture(e.pointerId); draw(); showLoupe(e,pts[best]); return; }
+  if (sel>=0){ pts[sel]=p; src[sel]='dr'; unverify(); refresh(); return; }
+  const next = pts.findIndex(q=>!q);
+  if (next>=0){ pts[next]=p; src[next]='dr'; unverify(); refresh(); }
+});
+cv.addEventListener('pointermove',e=>{ if(dragIdx<0) return; dragged=true; pts[dragIdx]=toImg(e); src[dragIdx]='dr'; unverify(); refresh(); showLoupe(e,pts[dragIdx]); });
+const endDrag=()=>{ if(dragIdx>=0){ dragIdx=-1; loupe.hidden=true; refresh(); } };
+cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
+cv.addEventListener('keydown',e=>{
+  if (sel<0 || !pts[sel]) { if(e.key==='Escape'){sel=-1;refresh();} return; }
+  const step = (e.shiftKey?10:2)*uiScale();
+  const d = {ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[e.key];
+  if (d){ e.preventDefault(); pts[sel]={x:pts[sel].x+d[0],y:pts[sel].y+d[1]}; src[sel]='dr'; unverify(); refresh(); }
+  else if (e.key==='Enter'){ e.preventDefault(); src[sel]='dr'; const nx = src.findIndex((s,i)=>s==='ai'); sel = nx; refresh(); if(nx>=0) scrollToPoint(nx); }
+  else if (e.key==='Escape'){ sel=-1; refresh(); }
+});
+function scrollToPoint(i){
+  const p = pts[i]; if(!p || $('zoom').value==='1') return;
+  const rc = cv.getBoundingClientRect(), sx = p.x/cv.width*rc.width, sy = p.y/cv.height*rc.height;
+  stage.scrollTo({left: sx - stage.clientWidth/2, top: sy - stage.clientHeight/2, behavior:'smooth'});
+}
+$('undo').addEventListener('click',()=>{ for(let i=pts.length-1;i>=0;i--){ if(pts[i]){pts[i]=null;src[i]=null;break;} } sel=-1; unverify(); refresh(); });
+$('clear').addEventListener('click',()=>{ pts=LM.map(()=>null); src=LM.map(()=>null); sel=-1; aiRegion=null; unverify(); refresh(); });
+
+/* ================= IMAGE LOADING ================= */
+function setImage(source,w,h){
+  img = source; srcW=w; srcH=h;
+  const s = Math.min(1, 2400/Math.max(w,h)); cv.width=Math.round(w*s); cv.height=Math.round(h*s);
+  pts=LM.map(()=>null); src=LM.map(()=>null); sel=-1; aiRegion=null; aiSummary=null;
+  ROOD.forEach(r=>{ $('r_'+r.id).checked=false; $('ai_'+r.id).hidden=true; });
+  $('angOv').value='auto'; $('contactOv').value='auto'; $('drBand').value='agree'; unverify();
+  $('aiStatus').hidden=true; applyZoom();
+}
+function loadFile(f){
+  if(!f || !/^image\//.test(f.type)){ $('pHint').textContent='That file is not an image. Export the OPG as JPG or PNG and try again.'; return; }
+  const rd = new FileReader();
+  rd.onload = ()=>{ const im = new Image(); im.onload=()=>{ setImage(im, im.naturalWidth, im.naturalHeight); refresh(); if (capsReady) runAi(true); else { aiPending = true; setAi('Radiograph loaded. Detection starts as soon as the page finishes connecting to Claude.'); } }; im.src = rd.result; };
+  rd.readAsDataURL(f);
+}
+$('file').addEventListener('change',e=>loadFile(e.target.files[0]));
+['dragenter','dragover'].forEach(t=>stage.addEventListener(t,e=>{e.preventDefault();stage.classList.add('drag');}));
+['dragleave','drop'].forEach(t=>stage.addEventListener(t,e=>{e.preventDefault();stage.classList.remove('drag');}));
+stage.addEventListener('drop',e=>{ const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) loadFile(f); });
+
+/* ================= AI LANDMARK DETECTION ================= */
+function setAi(t){ $('aiStatus').hidden=false; $('aiStatus').textContent=t; }
+function plainCanvas(){ const c=document.createElement('canvas'); c.width=cv.width; c.height=cv.height; c.getContext('2d').drawImage(img,0,0,cv.width,cv.height); return c; }
+function toBlob(c,q){ return new Promise(res=>c.toBlob(res,'image/jpeg',q||0.9)); }
+function scaled(srcC, sx,sy,sw,sh, maxDim){
+  const s = Math.min(maxDim/Math.max(sw,sh), 3), c=document.createElement('canvas');
+  c.width=Math.round(sw*s); c.height=Math.round(sh*s);
+  const g=c.getContext('2d'); g.filter='contrast(115%)'; g.drawImage(srcC,sx,sy,sw,sh,0,0,c.width,c.height); return c;
+}
+const clamp01 = v => typeof v==='number' && isFinite(v) ? Math.max(0,Math.min(1,v)) : null;
+/* Labelled 10x10 grid so the model reads coordinates against visible ticks */
+function withGrid(c, marks){
+  const o=document.createElement('canvas'); o.width=c.width; o.height=c.height; const g=o.getContext('2d'); g.drawImage(c,0,0);
+  const W=c.width, H=c.height, f=Math.max(11,Math.round(W/70));
+  g.font='bold '+f+'px monospace'; g.lineWidth=1;
+  for(let i=1;i<10;i++){ const x=W*i/10, y=H*i/10;
+    g.strokeStyle= i===5?'rgba(0,255,255,.55)':'rgba(0,255,255,.28)'; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H); g.moveTo(0,y); g.lineTo(W,y); g.stroke();
+    g.fillStyle='rgba(0,0,0,.6)'; g.fillRect(x-f*0.9,2,f*1.8,f+4); g.fillRect(2,y-f*0.6,f*1.8,f+4);
+    g.fillStyle='#00ffff'; g.textAlign='center'; g.fillText('0.'+i,x,f+2); g.textAlign='left'; g.fillText('0.'+i,4,y+f*0.4); }
+  if (marks){ marks.forEach(m=>{ const x=m.x*W, y=m.y*H, r=Math.max(6,W/160);
+    g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fillStyle='rgba(255,60,60,.9)'; g.fill(); g.strokeStyle='#000'; g.lineWidth=2; g.stroke();
+    g.fillStyle='#fff'; g.strokeStyle='#000'; g.lineWidth=3; g.font='bold '+(f+2)+'px monospace'; g.textAlign='left';
+    g.strokeText(m.label,x+r+2,y-r); g.fillText(m.label,x+r+2,y-r); }); }
+  return o;
+}
+const ANAT = `How the anatomy looks on a panoramic radiograph: teeth are the brightest structures; enamel crowns are brightest, roots are lighter grey tapering downward into the darker bone. The occlusal plane is the line along the biting surfaces of the lower molars. The lower first molar (M1) is the large two rooted molar in front, the second molar (M2) sits behind it, and the third molar (M3, the wisdom tooth) is the most posterior tooth, often tilted, partly covered by bone, sitting against or below the second molar. The anterior border of the ramus is the bright vertical or oblique edge of bone rising behind the third molar. The mandibular (inferior alveolar) canal is a dark horizontal band a few millimetres wide, bordered above and below by thin bright white cortical lines, running forward from the ramus below the molar roots. The cemento enamel junction (CEJ) is where the bright enamel of the crown ends and the root begins.`;
+let aiBusy=false, aiPending=false;
+$('aiDetect').addEventListener('click',()=>runAi(false));
+$('fillAi').addEventListener('click',()=>runAi(false));
+$('rerun').addEventListener('click',()=>runAi(false));
+$('approveAll').addEventListener('click',()=>{ src=src.map(s=>s==='ai'?'dr':s); sel=-1; $('approveBar').hidden=true; setAi('Landmarks approved. Review the signs and findings on the right, then confirm the assessment.'); refresh(); });
+async function runAi(auto){
+  if (!img){ setAi('Upload an OPG first.'); return; }
+  if (aiBusy) return;
+  if (!caps.sample){ templateFallback(window.claude ? 'Claude access is not available in this view' : 'page is not open in Claude'); return; }
+  if (caps.imagesConfirmedNo){ templateFallback('this Claude view cannot send images, confirmed by a real attempt'); return; }
+  setAi('Requesting Claude access for this page...');
+  if (!(await ensureSampleAccess())){ templateFallback('Claude access was declined for this page; allow it from the page menu to enable detection'); return; }
+  let tooth = $('tooth').value, sideImg = tooth==='48' ? 'LEFT' : 'RIGHT';
+  const btn=$('aiDetect'); btn.disabled=true; aiBusy=true; $('busy').hidden=false; $('approveBar').hidden=true;
+  pts=LM.map(()=>null); src=LM.map(()=>null); sel=-1; refresh();
+  try{
+    const base = plainCanvas();
+    setAi('Step 1 of 3: finding the third molar region...');
+    const full = scaled(base,0,0,base.width,base.height,1568);
+    const r1 = await caps.sample.json(
+`You are assisting a dentist reading a dental panoramic radiograph (OPG). Standard OPG orientation: the patient's right side is on the LEFT of the image.
+Check both lower third molars: tooth 48 (patient's lower right, image LEFT half) and tooth 38 (patient's lower left, image RIGHT half).
+Return JSON only, no prose:
+{"t48": {"found": true|false, "impacted": true|false, "region": {"x0":0,"y0":0,"x1":0,"y1":0}}, "t38": {"found": true|false, "impacted": true|false, "region": {"x0":0,"y0":0,"x1":0,"y1":0}}, "quality": "good"|"fair"|"poor", "note": "short"}
+${ANAT}
+A cyan grid marks tenths of the image. Each region is a box in normalized image coordinates (0 to 1, origin top left) that contains the lower first, second and third molars on that side, the anterior border of the ramus behind them, and the mandibular canal below their roots, with about 10% margin. found = a mandibular third molar is present on that side; impacted = it is partially or fully impacted.`,
+      {images:[await toBlob(withGrid(full))], modelTier:'default'});
+    const pick = t => r1 && r1['t'+t] && r1['t'+t].found && r1['t'+t].region ? r1['t'+t] : null;
+    let chosen = pick(tooth), switched = false;
+    const other = tooth==='38' ? '48' : '38';
+    if (auto && pick(other) && (!chosen || (pick(other).impacted && !chosen.impacted))){ tooth = other; chosen = pick(other); switched = true; }
+    else if (!chosen && pick(other)){ tooth = other; chosen = pick(other); switched = true; }
+    if (switched){ $('tooth').value = tooth; sideImg = tooth==='48' ? 'LEFT' : 'RIGHT'; }
+    if (!chosen){ setAi('Exostan could not find a lower third molar on this radiograph. Check the image, or place the points manually.'); return; }
+    r1.region = chosen.region;
+    const both = pick('38') && pick('48');
+    let x0=clamp01(r1.region.x0), y0=clamp01(r1.region.y0), x1=clamp01(r1.region.x1), y1=clamp01(r1.region.y1);
+    if ([x0,y0,x1,y1].some(v=>v==null) || x1-x0<0.05 || y1-y0<0.05){ setAi('The region answer was unusable. Try again or place points manually.'); return; }
+    const W=base.width, H=base.height;
+    const rx=x0*W, ry=y0*H, rw=(x1-x0)*W, rh=(y1-y0)*H;
+    aiRegion = {x:rx,y:ry,w:rw,h:rh}; draw();
+    setAi('Step 2 of 3: placing the 12 landmarks and reading Rood and Shehab signs...');
+    const crop = scaled(base, rx,ry,rw,rh, 1400);
+    const defs = LM.map((l,i)=>(i+1)+'. "'+l.id+'": '+l.name+'. '+l.hint).join('\n');
+    const mesialSide = tooth==='48' ? 'RIGHT' : 'LEFT';
+    const r2 = await caps.sample.json(
+`You are an oral and maxillofacial radiology assistant placing landmarks for a dentist. The image is a crop of a panoramic radiograph around the lower ${tooth==='48'?'right':'left'} third molar (tooth ${tooth}). A cyan grid with labels marks tenths of the image width and height; use it to read coordinates precisely. Mesial (toward the midline) is to the ${mesialSide} of this crop; the ramus is on the opposite side.
+${ANAT}
+Locate these 12 landmarks:
+${defs}
+Also assess the Rood and Shehab signs where the third molar roots meet the canal: darkRoot (a dark band across the root where the canal crosses), diversion (the canal changes direction at the root), whiteLine (one or both white canal borders vanish where the root overlaps), narrowRoot (root abruptly narrows at the canal), narrowCanal (canal narrows at the root), deflect (root bends sharply at the canal), bifid (dark and split apex).
+Work carefully: first identify M1, M2, M3, the ramus edge and the canal in the "analysis" field, then give coordinates.
+Return JSON only:
+{"analysis": "2 to 4 sentences locating M1, M2, M3, ramus border and canal using grid coordinates", "landmarks": {"m1c":[x,y], "m2c":[x,y], "m2a":[x,y], "m2cej":[x,y], "m2d":[x,y], "m3top":[x,y], "m3c":[x,y], "m3a":[x,y], "m3m":[x,y], "m3d":[x,y], "ramus":[x,y], "ian":[x,y]}, "confidence": {"m1c":0.0, "m2c":0.0, "m2a":0.0, "m2cej":0.0, "m2d":0.0, "m3top":0.0, "m3c":0.0, "m3a":0.0, "m3m":0.0, "m3d":0.0, "ramus":0.0, "ian":0.0}, "rood": {"darkRoot":false, "diversion":false, "whiteLine":false, "narrowRoot":false, "narrowCanal":false, "deflect":false, "bifid":false}, "roots": 0, "notes": "one or two short sentences for the dentist"}
+Coordinates are fractions of THIS image's width and height (0 to 1, origin top left), read against the grid. roots: 0 fused or conical, 1 multiple or divergent, 2 curved or hooked.`,
+      {images:[await toBlob(withGrid(crop),0.92)], modelTier:'complex'});
+    // Pass 3: zoom on the third molar and correct the points
+    try{
+      const L0 = r2 && r2.landmarks || {};
+      const have = LM.filter(l=>Array.isArray(L0[l.id]) && clamp01(L0[l.id][0])!=null);
+      if (have.length >= 8){
+        setAi('Step 3 of 3: zooming on the third molar and correcting the points...');
+        const xs = have.map(l=>clamp01(L0[l.id][0])), ys = have.map(l=>clamp01(L0[l.id][1]));
+        const mx0=Math.min(...xs), mx1=Math.max(...xs), my0=Math.min(...ys), my1=Math.max(...ys);
+        const px=(mx1-mx0)*0.18+0.03, py=(my1-my0)*0.18+0.03;
+        const zx0=Math.max(0,mx0-px), zy0=Math.max(0,my0-py), zx1=Math.min(1,mx1+px), zy1=Math.min(1,my1+py);
+        const zc = scaled(base, rx+zx0*rw, ry+zy0*rh, (zx1-zx0)*rw, (zy1-zy0)*rh, 1400);
+        const marks = have.map(l=>({x:(clamp01(L0[l.id][0])-zx0)/(zx1-zx0), y:(clamp01(L0[l.id][1])-zy0)/(zy1-zy0), label:String(LM.indexOf(l)+1)}));
+        const r3 = await caps.sample.json(
+`You are checking landmark placement on a zoomed crop of a panoramic radiograph around the lower ${tooth==='48'?'right':'left'} third molar (tooth ${tooth}). Mesial is to the ${mesialSide}. A cyan grid marks tenths of the image. Red numbered dots are the current landmark positions:
+${defs}
+${ANAT}
+For EVERY landmark decide whether the red dot sits exactly on the described anatomical point. If it is off, give the corrected position. If it is right, repeat the same coordinates. Be exact: the dentist will use these for measurements.
+Return JSON only: {"analysis": "which numbers were off and why, briefly", "landmarks": {"m1c":[x,y], "m2c":[x,y], "m2a":[x,y], "m2cej":[x,y], "m2d":[x,y], "m3top":[x,y], "m3c":[x,y], "m3a":[x,y], "m3m":[x,y], "m3d":[x,y], "ramus":[x,y], "ian":[x,y]}, "confidence": {"m1c":0.0, "m2c":0.0, "m2a":0.0, "m2cej":0.0, "m2d":0.0, "m3top":0.0, "m3c":0.0, "m3a":0.0, "m3m":0.0, "m3d":0.0, "ramus":0.0, "ian":0.0}}
+Coordinates are fractions of THIS zoomed image (0 to 1, origin top left). If a landmark lies outside this zoomed image, keep its previous position by returning null for it.`,
+          {images:[await toBlob(withGrid(zc, marks),0.92)], modelTier:'complex'});
+        if (r3 && r3.landmarks){
+          LM.forEach(l=>{ const v=r3.landmarks[l.id]; if(!Array.isArray(v)) return; const nx=clamp01(v[0]), ny=clamp01(v[1]); if(nx==null||ny==null) return;
+            r2.landmarks[l.id]=[zx0+nx*(zx1-zx0), zy0+ny*(zy1-zy0)];
+            if (r3.confidence && typeof r3.confidence[l.id]==='number'){ r2.confidence = r2.confidence||{}; r2.confidence[l.id]=r3.confidence[l.id]; } });
+        }
+      }
+    }catch(e3){ /* keep pass 2 result */ }
+    const L = r2 && r2.landmarks || {};
+    let placed=0, low=[];
+    LM.forEach((l,i)=>{
+      const v=L[l.id]; if(!Array.isArray(v)) return;
+      const nx=clamp01(v[0]), ny=clamp01(v[1]); if(nx==null||ny==null) return;
+      pts[i]={x:rx+nx*rw, y:ry+ny*rh}; src[i]='ai'; placed++;
+      const cf = r2.confidence && r2.confidence[l.id]; if (typeof cf==='number' && cf<0.5) low.push(i+1);
+    });
+    ROOD.forEach(r=>{ const on = !!(r2.rood && r2.rood[r.id]); $('r_'+r.id).checked = on; $('ai_'+r.id).hidden = !on; });
+    if (r2.roots===0||r2.roots===1||r2.roots===2) $('roots').value=String(r2.roots);
+    unverify(); applyZoom();
+    sel = -1; refresh();
+    $('approveBar').hidden = placed < 12;
+    setAi('Tooth '+tooth+(switched?' (selected automatically)':'')+'. AI placed '+placed+' of 12 landmarks'+(low.length?'; lower confidence on points '+low.join(', ')+', check these first':'')+'. '+(r2.notes?r2.notes+' ':'')+(both?'Both lower third molars are present; switch the Tooth field and press Re-run AI to assess the other side. ':'')+(placed<12?'Place the missing points by clicking the image.':''));
+  } catch(err){
+    const code = err && err.code || 'error';
+    await refreshDiag();
+    if (code==='images_unavailable'){ caps.sampleImages=false; caps.imagesConfirmedNo=true; templateFallback('this Claude view cannot send images. Open the same link in a web browser at claude.ai and try Fill with AI there'); }
+    else if (code==='not_granted'||code==='sampling_disabled'){ templateFallback('Claude access is '+code.replace('_',' ')+' for this page'); }
+    else if (code==='rate_limited'){ setAi('Too many AI requests just now. Wait a minute and press Fill with AI again.'); }
+    else if (code==='image_rejected'){ setAi('The image was rejected by Claude ('+(err.message||'')+'). Export the OPG as a JPG under 20 MB and upload again.'); }
+    else { setAi('AI detection failed: '+code+(err&&err.message?' ('+err.message+')':'')+'. Press Fill with AI to retry, or place the points by clicking.'); }
+  } finally { btn.disabled=false; aiBusy=false; $('busy').hidden=true; }
+}
+
+/* ================= AI SUMMARY ================= */
+$('aiSum').addEventListener('click', async ()=>{
+  if (!last || !caps.sample) return;
+  const r=last, c=ctxInfo(), btn=$('aiSum'); btn.disabled=true; $('exportMsg').textContent='Writing the summaries...';
+  const data = {tooth:c.tooth, difficulty_pct:r.diffPct, exostan_band:r.band, dentist_final_band:r.finalBand, ian_pct:r.ianPct, ian_level:r.ianBand,
+    winter:r.winter, angle_deg:Math.round(r.theta), depth:r.level, ramus:r.ramusCls, m2_contact:r.contact, apex_to_canal_mm:+r.distMm.toFixed(1),
+    rood_signs:r.signs.map(id=>ROOD.find(x=>x.id===id).name), roots:['fused or conical','multiple or divergent','curved or hooked'][r.rootPts],
+    pederson:r.pdi, observations:c.obs, actions:c.actions, next_steps:r.next};
+  try{
+    const out = await caps.sample.json(
+`Write two short summaries of this impacted mandibular third molar assessment, verified by the treating dentist.
+Data: ${JSON.stringify(data)}
+Clinical grounding: root darkening, canal diversion and interruption of the white line are the Rood and Shehab signs with the most evidence for true nerve contact; a panoramic radiograph cannot rule contact out, CBCT is the reference; coronectomy lowers nerve injury risk when roots contact the canal.
+Rules: use only the data given, do not invent findings, do not use dashes as punctuation, no markdown.
+Return JSON only: {"doctor_summary": "3 to 4 sentences, clinical register, for the dentist's record", "patient_summary": "3 sentences, plain language at a 12 year old reading level, calm and honest, no jargon, no percentages"}`,
+      {modelTier:'default'});
+    if (out && out.doctor_summary){ aiSummary = out; refreshTextOnly(); $('exportMsg').textContent='Summaries added to both reports.'; }
+    else $('exportMsg').textContent='The summary came back empty. Try again.';
+  } catch(err){ $('exportMsg').textContent = err && err.code==='not_granted' ? 'AI access was not allowed for this page.' : 'Summary failed: '+(err&&err.message||'unknown error'); }
+  finally{ btn.disabled=false; gateExports(); }
+});
+
+/* ================= PDF ================= */
+function annotatedCrop(){
+  const k = uiScale(); const c=document.createElement('canvas'); c.width=cv.width; c.height=cv.height;
+  const g=c.getContext('2d'); g.filter='brightness('+$('bright').value+'%) contrast('+$('contrast').value+'%)'; g.drawImage(img,0,0,cv.width,cv.height); g.filter='none';
+  const saveSel=sel; sel=-1; drawOverlay(g, Math.max(1,cv.width/1400), false); sel=saveSel;
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  let x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const pw=(x1-x0)*0.35+40, ph=(y1-y0)*0.35+40;
+  x0=Math.max(0,x0-pw); y0=Math.max(0,y0-ph); x1=Math.min(c.width,x1+pw); y1=Math.min(c.height,y1+ph);
+  const roi=document.createElement('canvas'); const s=Math.min(1600/(x1-x0),2); roi.width=Math.round((x1-x0)*s); roi.height=Math.round((y1-y0)*s);
+  roi.getContext('2d').drawImage(c,x0,y0,x1-x0,y1-y0,0,0,roi.width,roi.height);
+  const full=document.createElement('canvas'); const fs=Math.min(1,1400/c.width); full.width=Math.round(c.width*fs); full.height=Math.round(c.height*fs);
+  full.getContext('2d').drawImage(c,0,0,full.width,full.height);
+  return {roi, full};
+}
+const BRAND=[31,94,140], INK=[21,32,42], MUTED=[90,103,116], LINE=[210,216,222];
+const BANDRGB={Easy:[44,122,87],Moderate:[168,112,26],Difficult:[178,58,58],'Refer to OMFS':[106,62,158],Low:[44,122,87],High:[178,58,58]};
+function pdfKit(title, subtitle){
+  const {jsPDF} = window.jspdf; const doc = new jsPDF({unit:'mm',format:'a4'});
+  const W=210, H=297, M=16; let y=0;
+  function header(){
+    doc.setFillColor(...BRAND); doc.rect(0,0,W,20,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.text('EXOSTAN',M,13);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text(title,W-M,9,{align:'right'}); doc.text(subtitle,W-M,14.5,{align:'right'});
+    y=28;
+  }
+  function footer(){
+    const n=doc.getNumberOfPages();
+    for(let i=1;i<=n;i++){ doc.setPage(i); doc.setDrawColor(...LINE); doc.line(M,H-14,W-M,H-14);
+      doc.setFontSize(7.5); doc.setTextColor(...MUTED);
+      doc.text('Exostan decision support prototype. The treating dentist is responsible for all clinical decisions. CBCT is the reference standard for nerve relation.',M,H-9.5,{maxWidth:W-2*M-20});
+      doc.text(i+' / '+n,W-M,H-9.5,{align:'right'}); }
+  }
+  function need(h){ if (y+h > H-20){ doc.addPage(); header(); } }
+  function h2(t){ need(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BRAND); doc.text(t.toUpperCase(),M,y); y+=2; doc.setDrawColor(...LINE); doc.line(M,y,W-M,y); y+=5; }
+  function p(t,size,style,color,indent){ doc.setFont('helvetica',style||'normal'); doc.setFontSize(size||10); doc.setTextColor(...(color||INK));
+    const lines = doc.splitTextToSize(String(t), W-2*M-(indent||0)); const lh=(size||10)*0.45;
+    lines.forEach(l=>{ need(lh); doc.text(l,M+(indent||0),y); y+=lh; }); y+=1.2; }
+  function bullets(arr,size){ arr.forEach(t=>{ doc.setFont('helvetica','normal'); doc.setFontSize(size||10); const lines=doc.splitTextToSize(String(t),W-2*M-6); const lh=(size||10)*0.45;
+    need(lh*lines.length); doc.setTextColor(...BRAND); doc.text('•',M+1,y); doc.setTextColor(...INK); lines.forEach(l=>{ doc.text(l,M+6,y); y+=lh; }); y+=0.8; }); y+=1; }
+  function kv(rows){ rows.forEach(([k,v])=>{ doc.setFontSize(9.5); const lines=doc.splitTextToSize(String(v||'-'),W-2*M-48); need(4.6*lines.length);
+    doc.setFont('helvetica','normal'); doc.setTextColor(...MUTED); doc.text(k,M,y); doc.setTextColor(...INK); lines.forEach((l,i)=>doc.text(l,M+48,y+i*4.3)); y+=4.3*lines.length+1; }); y+=1.5; }
+  function image(c, maxH){ const ratio=c.height/c.width; let w=W-2*M, h=w*ratio; if(h>maxH){ h=maxH; w=h/ratio; } need(h+2);
+    doc.addImage(c.toDataURL('image/jpeg',0.88),'JPEG',M+(W-2*M-w)/2,y,w,h); y+=h+3; }
+  function scoreBox(x,w,label,pct,band,rgb,sub){
+    doc.setDrawColor(...LINE); doc.roundedRect(x,y,w,30,2,2,'S');
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED); doc.text(label,x+4,y+6);
+    doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(...rgb); doc.text(pct+'%',x+4,y+16);
+    doc.setFontSize(9); doc.text(band,x+w-4,y+16,{align:'right'});
+    doc.setFillColor(236,239,242); doc.rect(x+4,y+19.5,w-8,2.5,'F'); doc.setFillColor(...rgb); doc.rect(x+4,y+19.5,(w-8)*pct/100,2.5,'F');
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...MUTED); doc.text(sub,x+4,y+27,{maxWidth:w-8});
+  }
+  function table(head, rows, widths){
+    const x0=M; doc.setFontSize(9);
+    need(7); doc.setFont('helvetica','bold'); doc.setTextColor(...MUTED); let x=x0; head.forEach((h,i)=>{ doc.text(h,x,y); x+=widths[i]; }); y+=2; doc.setDrawColor(...LINE); doc.line(M,y,W-M,y); y+=4;
+    rows.forEach(r=>{ const cells=r.map((c,i)=>doc.splitTextToSize(String(c),widths[i]-2)); const h=Math.max(...cells.map(c=>c.length))*4.2; need(h+2);
+      doc.setFont('helvetica','normal'); doc.setTextColor(...INK); let xx=x0; cells.forEach((c,i)=>{ c.forEach((l,j)=>doc.text(l,xx,y+j*4.2)); xx+=widths[i]; }); y+=h; doc.setDrawColor(236,239,242); doc.line(M,y-1.5,W-M,y-1.5); y+=2; });
+    y+=2;
+  }
+  return {doc, header, footer, h2, p, bullets, kv, image, scoreBox, table, get y(){return y;}, set y(v){y=v;}, W, M};
+}
+function dentistPdf(){
+  const r=last, c=ctxInfo(), im=annotatedCrop();
+  const K = pdfKit('Clinical assessment report', 'Tooth '+c.tooth+' · '+fmtDate(c.date)); K.header();
+  K.kv([['Patient',c.pt+(c.file?'   (file '+c.file+')':'')],['Dentist',c.dr+(c.clinic?', '+c.clinic:'')],['Date',fmtDate(c.date)],['Tooth',c.tooth+(c.tooth==='38'?' lower left third molar':' lower right third molar')]]);
+  const w=(K.W-2*K.M-6)/2;
+  K.scoreBox(K.M,w,'Extraction difficulty',r.diffPct,r.finalBand,BANDRGB[r.finalBand],r.drBand!=='agree'?'Dentist call; Exostan estimated '+r.band:(r.knn.pct!=null?'Rules '+r.rulePct+'%, similar cases '+r.knn.pct+'%':'Pederson index '+r.pdi+' plus modifiers'));
+  K.scoreBox(K.M+w+6,w,'IAN contact likelihood',r.ianPct,r.ianBand,BANDRGB[r.ianBand]||[168,112,26],r.ianPct>=40?'CBCT advised before surgery':'Low panoramic risk; OPG cannot fully exclude contact');
+  K.y = K.y+36;
+  K.h2('Radiograph, region of interest'); K.image(im.roi, 92);
+  K.p('Overlays: occlusal plane (blue dashed), M2 axis (yellow), M3 axis (red), crown width (green), space to ramus (violet), apex to canal line (red when near, green when far). Numbered dots are the verified landmarks.',7.5,'normal',MUTED);
+  K.h2('Classification');
+  K.table(['Factor','Finding','Measure','Points'],[
+    ['Angulation (Winter)', r.winter+(r.angOv!=='auto'?' (dentist override)':''), r.theta.toFixed(0)+'°', String(r.wPts)],
+    ['Depth (Pell & Gregory)', r.level, (r.dTopMm>=0?'+':'')+r.dTopMm.toFixed(1)+' mm', String(r.lPts)],
+    ['Ramus relation (Pell & Gregory)', r.ramusCls, Math.round(r.ratio*100)+'% of crown width', String(r.rPts)],
+    ['Contact with M2', r.contact?'Contact':'No contact', r.gapMm.toFixed(1)+' mm', r.contact?'+1':'0'],
+    ['IAN proximity', r.ianNear?'Near':'Far', r.distMm>=0?r.distMm.toFixed(1)+' mm above canal':'overlap '+Math.abs(r.distMm).toFixed(1)+' mm', r.ianNear?'+1':'0'],
+    ['Root morphology', ['Fused or conical','Multiple or divergent','Curved or hooked'][r.rootPts], '', r.rootPts?'+'+r.rootPts:'0'],
+    ['Total', 'Pederson '+r.pdi+' ('+r.pdiBand+')', '', r.total+' / 14']
+  ],[52,58,46,22]);
+  K.h2('Rood and Shehab signs');
+  K.p(r.signs.length ? r.signs.map(id=>{const s=ROOD.find(x=>x.id===id); return s.name+' (LR+ '+s.lr.toFixed(2)+')';}).join('; ') : 'None identified on this radiograph.',10);
+  K.p('Paper rule (Exostan flowchart): '+(r.flags.length?'Difficult, flagged for '+r.flags.join(', '):'Easy, no red-path factors')+'.',9,'normal',MUTED);
+  if (aiSummary && aiSummary.doctor_summary){ K.h2('Summary'); K.p(aiSummary.doctor_summary,10); }
+  K.h2('Clinical observations'); K.p(c.obs||'None recorded.',10);
+  K.h2('Actions taken'); c.actions.length ? K.bullets(c.actions) : K.p('None recorded.',10);
+  K.h2('Recommended next steps'); K.bullets(r.next);
+  if (r.knn.near.length){ K.h2('Similar past cases'); K.p($('similar').textContent,9.5); }
+  K.h2('Full radiograph'); K.image(im.full, 70);
+  K.h2('Verification');
+  K.p('Landmarks, signs and findings reviewed and confirmed by the treating dentist.',10);
+  K.y += 8; K.doc.setDrawColor(...INK); K.doc.line(K.M,K.y,K.M+70,K.y); K.doc.line(K.M+100,K.y,K.M+150,K.y); K.y+=4.5;
+  K.p((c.dr||'Dentist')+'                                                         Date: '+fmtDate(c.date),9,'normal',MUTED);
+  K.footer(); return K.doc;
+}
+function patientPdf(){
+  const r=last, c=ctxInfo(), pl=plain(r), im=annotatedCrop();
+  const K = pdfKit('Your wisdom tooth assessment', (c.clinic||'')+(c.clinic?' · ':'')+fmtDate(c.date)); K.header();
+  K.p('Your wisdom tooth assessment',18,'bold',INK);
+  K.p((c.pt||'Patient')+' · lower '+(c.tooth==='38'?'left':'right')+' wisdom tooth ('+c.tooth+') · reviewed by '+(c.dr||'your dentist'),10,'normal',MUTED);
+  K.y+=2;
+  if (aiSummary && aiSummary.patient_summary){ K.p(aiSummary.patient_summary,11); }
+  K.h2('How complex is the removal?'); K.p(pl.diff,11);
+  const order=['Easy','Moderate','Difficult','Refer to OMFS'], labels=['Simple','Moderate','Complex','Specialist'];
+  const bw=(K.W-2*K.M-9)/4; order.forEach((b,i)=>{ const x=K.M+i*(bw+3), on=b===r.finalBand; K.doc.setFillColor(...(on?BANDRGB[b]:[236,239,242])); K.doc.roundedRect(x,K.y,bw,10,1.5,1.5,'F');
+    K.doc.setFont('helvetica',on?'bold':'normal'); K.doc.setFontSize(10); K.doc.setTextColor(...(on?[255,255,255]:MUTED)); K.doc.text(labels[i],x+bw/2,K.y+6.5,{align:'center'}); });
+  K.y+=16;
+  K.h2('The nerve near your tooth'); K.p(pl.nerve,11);
+  K.h2('What happens next'); K.bullets(pl.steps,11);
+  K.h2('Your X-ray'); K.image(im.roi, 70);
+  K.p('The marked area shows your wisdom tooth, the tooth in front of it, and the nerve canal below.',8.5,'normal',MUTED);
+  K.h2('After the extraction'); K.bullets(['Some swelling and discomfort for 3 to 5 days is normal.','Bite on gauze for 30 minutes. Avoid rinsing, smoking and hot drinks for the first day.','Call the clinic if bleeding does not stop, pain gets worse after day 3, or your lip or chin still feels numb the next day.'],10);
+  K.h2('Questions you can ask'); K.bullets(['Do I need a 3D scan before the extraction?','Who will do the procedure, and where?','What are the risks for my tooth in particular?','How long will recovery take?'],10);
+  K.footer(); return K.doc;
+}
+function fileBase(){ const c=ctxInfo(); return ('Exostan_'+(c.pt||c.file||'case').replace(/[^A-Za-z0-9]+/g,'_')+'_'+c.tooth+'_'+(c.date||'')).replace(/_+$/,''); }
+async function savePdf(which){
+  if (!caps.downloads || !window.jspdf) return;
+  const btn=$(which==='dr'?'pdfDr':'pdfPt'); btn.disabled=true; $('exportMsg').textContent='Building the PDF...';
+  try{
+    const doc = which==='dr' ? dentistPdf() : patientPdf();
+    await caps.downloads.save({filename: fileBase()+(which==='dr'?'_dentist':'_patient')+'.pdf', data: doc.output('blob')});
+    $('exportMsg').textContent = (which==='dr'?'Dentist':'Patient')+' PDF saved.';
+  } catch(err){ $('exportMsg').textContent = err && err.code==='declined' ? 'Save cancelled.' : 'PDF export failed: '+(err&&err.message||'unknown error'); }
+  finally{ gateExports(); }
+}
+$('pdfDr').addEventListener('click',()=>savePdf('dr'));
+$('pdfPt').addEventListener('click',()=>savePdf('pt'));
+
+/* ================= EMAIL / JSON ================= */
+function copyText(t, msg){
+  const done=()=>{ $('exportMsg').textContent=msg||'Copied.'; };
+  try{ navigator.clipboard.writeText(t).then(done,fb); }catch(e){ fb(); }
+  function fb(){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); done();}catch(_){ $('exportMsg').textContent='Copy failed; select the report text instead.'; } ta.remove(); }
+}
+$('emailPt').addEventListener('click',()=>{
+  const r=last, c=ctxInfo(), pl=plain(r);
+  copyText(`Subject: Your wisdom tooth assessment (${fmtDate(c.date)})
+
+Dear ${c.pt||'patient'},
+
+Thank you for your visit. Here is a summary of the assessment of your lower ${c.tooth==='38'?'left':'right'} wisdom tooth.
+
+${aiSummary&&aiSummary.patient_summary?aiSummary.patient_summary+'\n\n':''}How complex is the removal: ${pl.diff}
+
+The nerve near your tooth: ${pl.nerve}
+
+What happens next:
+${pl.steps.map(s=>'- '+s).join('\n')}
+
+Your full patient report is attached as a PDF. Please contact us if you have any questions.
+
+Kind regards,
+${c.dr||''}${c.clinic?'\n'+c.clinic:''}`, 'Patient email copied. Paste it into your email and attach the patient PDF.');
+});
+$('emailRef').addEventListener('click',()=>{
+  const r=last, c=ctxInfo();
+  copyText(`Subject: Referral: impacted tooth ${c.tooth}, ${c.pt||'patient'}${c.file?' (file '+c.file+')':''}
+
+Dear colleague,
+
+I would be grateful if you could assess ${c.pt||'this patient'} for removal of the impacted lower ${c.tooth==='38'?'left':'right'} third molar (${c.tooth}).
+
+Findings on panoramic radiograph (${fmtDate(c.date)}):
+- ${r.winter} impaction, ${r.level}, ${r.ramusCls} (Pell & Gregory); Pederson index ${r.pdi}
+- ${r.contact?'Contact':'No contact'} with 37; roots ${['fused or conical','multiple or divergent','curved or hooked'][r.rootPts]}
+- Rood and Shehab signs: ${r.signs.length?r.signs.map(id=>ROOD.find(x=>x.id===id).name.toLowerCase()).join(', '):'none'}
+- Exostan difficulty ${r.diffPct}% (${r.finalBand}); IAN contact likelihood ${r.ianPct}% (${r.ianBand})
+
+Clinical observations: ${c.obs||'none recorded'}
+Actions so far: ${c.actions.length?c.actions.join('; '):'none'}
+
+The Exostan dentist report is attached.
+
+Kind regards,
+${c.dr||''}${c.clinic?'\n'+c.clinic:''}`, 'Referral letter copied. Attach the dentist PDF.');
+});
+function record(){
+  const r=last, c=ctxInfo();
+  return {schema:'exostan.case.v1', created:new Date().toISOString(), patient:{name:c.pt, file_number:c.file}, clinician:{name:c.dr, clinic:c.clinic}, date:c.date, tooth:c.tooth,
+    findings:{winter:r.winter, angle_deg:+r.theta.toFixed(1), depth:r.level, ramus:r.ramusCls, m2_contact:r.contact, apex_to_canal_mm:+r.distMm.toFixed(1),
+      rood_signs:r.signs, root_morphology:r.rootPts, pederson:r.pdi, total_points:r.total},
+    scores:{difficulty_pct:r.diffPct, exostan_band:r.band, dentist_band:r.finalBand, ian_pct:r.ianPct, ian_band:r.ianBand},
+    observations:c.obs, actions:c.actions, next_steps:r.next, summary:aiSummary||null, verified:$('verified').checked};
+}
+$('copyJson').addEventListener('click',()=>copyText(JSON.stringify(record(),null,2),'Patient log record copied as JSON. The Send to patient file button activates once the records API is connected.'));
+
+/* ================= CASE LIBRARY (db) ================= */
+$('saveCase').addEventListener('click', async ()=>{
+  if (!caps.db || !last) return;
+  const r=last, c=ctxInfo(), btn=$('saveCase'); btn.disabled=true;
+  const code = 'EX-'+(c.date||'').replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+  const docBody = {code, date:c.date, createdAt:new Date().toISOString(), tooth:c.tooth, dentist:c.dr||'', dentistId:myId||'',
+    winter:r.winter, wAuto:r.wAuto, angleDeg:+r.theta.toFixed(1), level:r.level, ramus:r.ramusCls, contact:r.contact, gapMm:+r.gapMm.toFixed(2),
+    distMm:+r.distMm.toFixed(2), signs:r.signs, roots:r.rootPts, pdi:r.pdi, total:r.total, diffPct:r.diffPct, ianPct:r.ianPct,
+    band:r.band, finalBand:r.finalBand, agreed:r.drBand==='agree', aiUsed: src.length>0 && !!aiRegion, outcome:null};
+  try{ await caps.db.collection('cases').doc(code).set(docBody); $('exportMsg').textContent='Saved to the case library as '+code+'. Record the surgical outcome there after the extraction.'; }
+  catch(err){ $('exportMsg').textContent = err && err.code==='quota_exceeded' ? 'The case library is full. Export it as CSV and remove old cases.' : 'Could not save: '+(err&&err.message||'unknown error'); }
+  finally{ gateExports(); }
+});
+function renderLibrary(){
+  const withOut = cases.filter(c=>c.outcome&&c.outcome.difficulty), cb = cases.filter(c=>c.outcome&&(c.outcome.cbct==='contact'||c.outcome.cbct==='none'));
+  const agree = cases.length ? Math.round(cases.filter(c=>c.agreed).length/cases.length*100) : null;
+  let hit = null; if (withOut.length){ hit = Math.round(withOut.filter(c=>{ const o=c.outcome.difficulty; const map={'Easy':'Easy','Moderate':'Moderate','Difficult':'Difficult','Very difficult':'Refer to OMFS'}; return map[o]===c.band; }).length/withOut.length*100); }
+  $('libStats').innerHTML = [
+    [cases.length,'cases saved'],[withOut.length,'with surgical outcome'],[cb.length,'CBCT-verified nerve relation'],
+    [agree==null?'–':agree+'%','dentist agreed with Exostan'],[hit==null?'–':hit+'%','predicted band matched outcome'],
+    [withOut.length>=5?'Active':'Needs '+(5-withOut.length),'similar-case estimate'],[cb.length>=20?'Active':'Needs '+(20-cb.length),'learned IAN weights']
+  ].map(([b,s])=>'<div><b>'+b+'</b><span>'+s+'</span></div>').join('');
+  const body=$('libBody');
+  if (!cases.length){ body.innerHTML='<tr><td colspan="10" class="muted">'+(caps.db?'No saved cases yet. Assess an OPG, verify it, then press Save to case library.':'The case library works when this page is opened in Claude.')+'</td></tr>'; return; }
+  body.innerHTML = cases.map(c=>{
+    const o=c.outcome;
+    return '<tr><td class="mono">'+esc(c.code)+'</td><td>'+esc(c.date)+'</td><td>'+esc(c.tooth)+'</td><td>'+esc(c.winter)+'</td><td>'+esc((c.level||'').replace('Level ',''))+' / '+esc((c.ramus||'').replace('Class ',''))+'</td><td class="num">'+c.diffPct+'%</td><td class="num">'+c.ianPct+'%</td><td>'+esc(c.finalBand)+'</td><td>'+(o?esc(o.difficulty||'')+(o.cbct&&o.cbct!=='not_done'?', CBCT '+esc(o.cbct):'')+(o.ian&&o.ian!=='none'?', IAN '+esc(o.ian):''):'<span class="muted">pending</span>')+'</td><td><button type="button" data-out="'+esc(c.code)+'">'+(o?'Edit':'Record')+' outcome</button></td></tr>'
+      +'<tr class="outrow" id="out_'+esc(c.code)+'" hidden><td colspan="10"><div class="outform">'
+      +'<label>Actual difficulty<select data-f="difficulty"><option value="">Select</option>'+['Easy','Moderate','Difficult','Very difficult'].map(v=>'<option'+(o&&o.difficulty===v?' selected':'')+'>'+v+'</option>').join('')+'</select></label>'
+      +'<label>Surgery time (min)<input type="number" data-f="minutes" min="0" max="300" value="'+(o&&o.minutes||'')+'"></label>'
+      +'<label>Bone removal<select data-f="bone"><option value="">Select</option><option'+(o&&o.bone==='yes'?' selected':'')+'>yes</option><option'+(o&&o.bone==='no'?' selected':'')+'>no</option></select></label>'
+      +'<label>Tooth sectioned<select data-f="section"><option value="">Select</option><option'+(o&&o.section==='yes'?' selected':'')+'>yes</option><option'+(o&&o.section==='no'?' selected':'')+'>no</option></select></label>'
+      +'<label>CBCT nerve relation<select data-f="cbct"><option value="not_done">Not done</option><option value="contact"'+(o&&o.cbct==='contact'?' selected':'')+'>Contact</option><option value="none"'+(o&&o.cbct==='none'?' selected':'')+'>No contact</option></select></label>'
+      +'<label>Nerve outcome<select data-f="ian"><option value="none">No deficit</option><option value="temporary"'+(o&&o.ian==='temporary'?' selected':'')+'>Temporary numbness</option><option value="permanent"'+(o&&o.ian==='permanent'?' selected':'')+'>Persistent over 6 months</option></select></label>'
+      +'<label>Procedure<select data-f="procedure"><option value="">Select</option>'+['Extraction','Coronectomy','Not operated'].map(v=>'<option'+(o&&o.procedure===v?' selected':'')+'>'+v+'</option>').join('')+'</select></label>'
+      +'<button type="button" class="primary" data-save="'+esc(c.code)+'">Save outcome</button></div></td></tr>';
+  }).join('');
+}
+$('libBody').addEventListener('click', async e=>{
+  const o=e.target.closest('[data-out]'), s=e.target.closest('[data-save]');
+  if (o){ const row=$('out_'+o.dataset.out); row.hidden=!row.hidden; }
+  if (s && caps.db){
+    const row=$('out_'+s.dataset.save), out={}; row.querySelectorAll('[data-f]').forEach(el=>{ out[el.dataset.f] = el.type==='number' ? (parseFloat(el.value)||null) : el.value; });
+    if (!out.difficulty){ $('libMsg').textContent='Choose the actual difficulty first.'; return; }
+    s.disabled=true;
+    try{ await caps.db.collection('cases').doc(s.dataset.save).update({outcome:out, outcomeAt:new Date().toISOString()}); $('libMsg').textContent='Outcome saved. Exostan will use it for the next assessment.'; }
+    catch(err){ $('libMsg').textContent='Could not save the outcome: '+(err&&err.message||'unknown error'); s.disabled=false; }
+  }
+});
+$('copyCsv').addEventListener('click',()=>{
+  const h=['code','date','tooth','winter','angle_deg','depth','ramus','m2_contact','apex_canal_mm','rood_signs','roots','pederson','difficulty_pct','ian_pct','exostan_band','dentist_band','out_difficulty','out_minutes','out_bone','out_section','out_cbct','out_ian','out_procedure'];
+  const rows = cases.map(c=>{ const o=c.outcome||{}; return [c.code,c.date,c.tooth,c.winter,c.angleDeg,c.level,c.ramus,c.contact,c.distMm,(c.signs||[]).join('|'),c.roots,c.pdi,c.diffPct,c.ianPct,c.band,c.finalBand,o.difficulty||'',o.minutes||'',o.bone||'',o.section||'',o.cbct||'',o.ian||'',o.procedure||''].map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(','); });
+  const t=[h.join(',')].concat(rows).join('\n');
+  try{ navigator.clipboard.writeText(t).then(()=>$('libMsg').textContent='Case library copied as CSV.',()=>$('libMsg').textContent='Copy failed.'); }catch(e){ $('libMsg').textContent='Copy failed.'; }
+});
+
+/* ================= KNOWLEDGE BASE ================= */
+function renderKB(){
+  const src = (t,u)=>'<a href="'+u+'" target="_blank" rel="noopener">'+t+'</a>';
+  $('kb').innerHTML = `
+  <section class="panel sec"><h2>Rood and Shehab signs</h2>
+    <p>Seven panoramic signs described by Rood and Shehab (Br J Oral Maxillofac Surg, 1990) that suggest the third molar roots are close to, or in contact with, the inferior alveolar canal. Four are root signs and three are canal signs. Exostan uses each sign's likelihood ratio (LR+) to raise the nerve contact estimate when the dentist confirms it.</p>
+    <div class="tbl"><table><thead><tr><th>Sign</th><th>Type</th><th>What you see on the OPG</th><th>Likely meaning</th><th class="num">LR+</th></tr></thead><tbody>
+      <tr><td><b>Darkening of the root</b></td><td>Root</td><td>A radiolucent band across the root where the canal overlaps it</td><td>Canal grooving or fenestrating the root; in one series nerve exposure was found in about 46% of darkened roots</td><td class="num">4.26</td></tr>
+      <tr><td><b>Diversion of the canal</b></td><td>Canal</td><td>The canal changes its course as it passes the root</td><td>Root displacing the canal or canal running through the roots</td><td class="num">5.49</td></tr>
+      <tr><td><b>Interruption of the white line</b></td><td>Canal</td><td>Loss of one or both radiopaque cortical borders of the canal where the root overlaps it</td><td>Loss of canal cortication, possible direct root contact</td><td class="num">2.05</td></tr>
+      <tr><td>Narrowing of the root</td><td>Root</td><td>The root abruptly narrows where it crosses the canal</td><td>Root indented or grooved by the canal</td><td class="num">2.60</td></tr>
+      <tr><td>Narrowing of the canal</td><td>Canal</td><td>The canal calibre reduces as it passes the root</td><td>Canal compressed by the root</td><td class="num">2.01</td></tr>
+      <tr><td>Deflection of the root</td><td>Root</td><td>The root bends sharply at the canal</td><td>Root growth deflected by the canal</td><td class="num">1.82</td></tr>
+      <tr><td>Dark and bifid apex</td><td>Root</td><td>The apex looks dark and split around the canal outline</td><td>Canal passing between the root tips; weak predictor</td><td class="num">1.00</td></tr>
+    </tbody></table></div>
+    <p class="note" style="margin-top:8px">LR+ for darkening, diversion and white line: pooled meta-analysis (Atieh 2010). Others derived from sensitivity and specificity against CBCT in a 79-tooth study. Bifid apex was not significant in most studies and adds no weight.</p>
+  </section>
+  <section class="panel sec"><h2>How to read the evidence</h2>
+    <p><b>Three signs matter most.</b> Root darkening, canal diversion and interruption of the white line are the signs meta-analyses and the Royal College of Surgeons of England guidance single out as worth acting on.</p>
+    <p><b>Signs rule in, they do not rule out.</b> Across 8 studies, specificity was high (0.81 to 0.97) but sensitivity low (0.06 to 0.49). A clean OPG lowers risk but cannot exclude contact.</p>
+    <p><b>More signs, more risk.</b> Two or more signs raised post-operative nerve deficit risk significantly in a prospective series (5.1% vs 0.56% in controls). With three or more signs, CBCT is strongly recommended.</p>
+    <p><b>Position matters too.</b> Horizontal impactions carry higher reported injury rates (about 4.7%) than vertical ones (about 0.9%).</p>
+  </section>
+  <section class="panel sec"><h2>Nerve injury and management</h2>
+    <div class="tbl"><table><tbody>
+      <tr><td>Overall IAN injury after third molar removal</td><td>0.35% to 8.4% across studies; 0.66% in a series of 4,708 extractions</td></tr>
+      <tr><td>Persistent deficit (over 6 months)</td><td>0% to 2%</td></tr>
+      <tr><td>When to request CBCT</td><td>When the OPG suggests a close relation (especially the three key signs) and the result would change management. Not routine for every case</td></tr>
+      <tr><td>Coronectomy</td><td>Removes the crown and leaves the roots. Meta-analysis of 1,488 teeth: odds of nerve injury about 4 times lower than full extraction; reintervention about 1.2%</td></tr>
+      <tr><td>Coronectomy contraindications</td><td>Non-vital tooth, caries reaching the pulp, immunocompromise, previous radiotherapy, unreliable follow-up</td></tr>
+      <tr><td>Consent</td><td>Discuss temporary and permanent numbness of lip and chin whenever risk is raised</td></tr>
+    </tbody></table></div>
+  </section>
+  <section class="panel sec"><h2>Difficulty scales used by Exostan</h2>
+    <div class="tbl"><table><thead><tr><th>Scale</th><th>What it scores</th><th>Points in Exostan</th></tr></thead><tbody>
+      <tr><td>Winter</td><td>Angle of M3 long axis to M2 long axis: vertical 10° either way, mesioangular 11° to 79°, horizontal 80° to 110°, distoangular below -10°</td><td>Mesio 1, horizontal 2, vertical 3, disto 4</td></tr>
+      <tr><td>Pell & Gregory depth</td><td>Highest point of M3 vs occlusal plane and M2 cervical line</td><td>A 1, B 2, C 3</td></tr>
+      <tr><td>Pell & Gregory ramus</td><td>Space between M2 distal surface and ramus vs M3 crown width</td><td>I 1, II 2, III 3</td></tr>
+      <tr><td>Modifiers</td><td>Contact with M2, IAN near, root morphology</td><td>+1, +1, 0 to +2</td></tr>
+    </tbody></table></div>
+    <p class="note" style="margin-top:8px">The Pederson index has wide reported accuracy (sensitivity 24% to 95%) and ranks vertical impactions harder than many surgeons would. That is why Exostan adds modifiers and learns from recorded outcomes. Newer indices (Parant, Yuasa, Zhang, WHARFE, Pernambuco) add patient factors such as age, mouth opening and BMI.</p>
+  </section>
+  <section class="panel sec"><h2>Training data status</h2>
+    <p>No public panoramic dataset carries extraction difficulty labels; published difficulty models were trained on private hospital data. The most relevant public set for nerve contact is <b>CONTACT</b> (1,478 third molar and canal pairs from 1,010 patients, labelled for root to canal contact). DENTEX, Tufts, O2PR and ExAn-MTM support tooth detection and segmentation. Exostan therefore learns from verified cases saved here, with surgical and CBCT outcomes as ground truth.</p>
+  </section>
+  <section class="panel sec"><h2>Sources</h2>
+    <p class="note">${[
+      src('Rood and Shehab signs: review of radiographic signs and IAN damage (Med Oral 2010)','http://www.medicinaoral.com/medoralfree01/v15i6/medoralv15i6p886.pdf'),
+      src('Atieh 2010, diagnostic accuracy of panoramic signs (JOMS)','https://www.sciencedirect.com/science/article/abs/pii/S0278239109005746'),
+      src('Su et al. 2017, systematic review of panoramic signs (JOMS)','https://www.sciencedirect.com/science/article/abs/pii/S0278239116312514'),
+      src('Correlation of panoramic high-risk markers with CBCT','https://pmc.ncbi.nlm.nih.gov/articles/PMC7109491/'),
+      src('Sedaghatfar et al. 2005 (JOMS)','https://www.sciencedirect.com/science/article/abs/pii/S0278239104012650'),
+      src('Radiographic signs, IDN exposure and injury, prospective (JOMS)','https://www.sciencedirect.com/science/article/abs/pii/S0278239110015703'),
+      src('Szalma et al., root darkening and IAN exposure','https://www.sciencedirect.com/science/article/abs/pii/S0901502712002834'),
+      src('RCS England third molar parameters of care (2021)','https://www.rcseng.ac.uk/-/media/files/rcs/fds/guidelines/3rd-molar-guidelines--april-2021.pdf'),
+      src('Sarikov and Juodzbalys 2014, IAN injury review','https://www.ejomr.org/JOMR/archives/2014/4/e1/v5n4e1ht.htm'),
+      src('Coronectomy vs total extraction meta-analysis (Cureus)','https://www.cureus.com/articles/475810-coronectomy-versus-total-extraction-for-third-molar-surgery-a-systematic-review-and-meta-analysis'),
+      src('Nerve injury in 4,708 extractions (Appl Sci 2021)','https://www.mdpi.com/2076-3417/11/2/816'),
+      src('Review of third molar difficulty indices','https://link.springer.com/article/10.1007/s12663-020-01452-6'),
+      src('CONTACT dataset paper (Sci Rep)','https://www.nature.com/articles/s41598-024-82915-5'),
+      src('Yoo et al. 2021, CNN difficulty prediction (Sci Rep)','https://www.nature.com/articles/s41598-021-81449-4')
+    ].join('<br>')}</p>
+  </section>`;
+}
+
+/* ================= SAMPLE CASE ================= */
+function rot(p,a,c){const cs=Math.cos(a),sn=Math.sin(a);return {x:c.x+p.x*cs-p.y*sn,y:c.y+p.x*sn+p.y*cs};}
+function makeSample(){
+  const W=1200,H=700, s=document.createElement('canvas'); s.width=W; s.height=H; const g=s.getContext('2d');
+  const bg=g.createRadialGradient(600,380,80,600,380,760); bg.addColorStop(0,'#3a3a3a'); bg.addColorStop(1,'#0c0c0c'); g.fillStyle=bg; g.fillRect(0,0,W,H);
+  g.fillStyle='#6f6f6f'; g.beginPath(); g.moveTo(40,300); g.lineTo(640,300); g.quadraticCurveTo(700,300,660,440); g.lineTo(790,60); g.lineTo(1010,40);
+  g.quadraticCurveTo(1060,300,1000,560); g.quadraticCurveTo(700,690,40,660); g.closePath(); g.fill();
+  g.strokeStyle='#bdbdbd'; g.lineWidth=14; g.beginPath(); g.moveTo(40,652); g.quadraticCurveTo(700,684,996,552); g.stroke();
+  g.strokeStyle='#9a9a9a'; g.lineWidth=10; g.beginPath(); g.moveTo(660,440); g.lineTo(790,60); g.stroke();
+  const canal=x=>560-Math.pow(Math.max(0,x-350),2)*0.00035;
+  g.lineWidth=24; g.strokeStyle='#3b3b3b'; g.beginPath(); for(let x=60;x<=980;x+=10){const y=canal(x); x===60?g.moveTo(x,y):g.lineTo(x,y);} g.stroke();
+  g.lineWidth=2.5; g.strokeStyle='#c8c8c8'; [-12,12].forEach(o=>{g.beginPath(); for(let x=60;x<=980;x+=10){const y=canal(x)+o; x===60?g.moveTo(x,y):g.lineTo(x,y);} g.stroke();});
+  function tooth(c,a,sh){ g.save(); g.translate(c.x,c.y); g.rotate(a);
+    g.fillStyle=sh.root; g.beginPath(); g.moveTo(-50,40); g.quadraticCurveTo(-48,150,-28,200); g.lineTo(-10,200); g.quadraticCurveTo(-8,110,0,60); g.quadraticCurveTo(8,110,10,200); g.lineTo(28,200); g.quadraticCurveTo(48,150,50,40); g.closePath(); g.fill();
+    g.fillStyle=sh.crown; g.beginPath(); g.moveTo(-55,45); g.lineTo(-55,-30); g.quadraticCurveTo(-55,-45,-35,-45); g.lineTo(35,-45); g.quadraticCurveTo(55,-45,55,-30); g.lineTo(55,45); g.closePath(); g.fill();
+    g.fillStyle=sh.pulp; g.fillRect(-18,-10,36,40); g.restore(); }
+  const sh={crown:'#e9e9e9',root:'#b9b9b9',pulp:'#8a8a8a'};
+  tooth({x:260,y:305},0,sh); tooth({x:390,y:305},0,sh); tooth({x:520,y:305},0,sh);
+  const a3=-45*Math.PI/180, c3={x:650,y:360}; tooth(c3,a3,{crown:'#f2f2f2',root:'#9f9f9f',pulp:'#8a8a8a'});
+  g.fillStyle='#8c8c8c'; for(let i=0;i<4;i++) g.fillRect(205+i*130,150,110,95);
+  const id=g.getImageData(0,0,W,H), d=id.data; for(let i=0;i<d.length;i+=4){const n=(Math.random()-.5)*22; d[i]+=n; d[i+1]+=n; d[i+2]+=n;} g.putImageData(id,0,0);
+  g.fillStyle='rgba(255,255,255,.55)'; g.font='16px IBM Plex Mono, monospace'; g.fillText('SCHEMATIC SAMPLE · NOT A PATIENT RADIOGRAPH',24,30);
+  const R=p=>rot(p,a3,c3);
+  return {canvas:s, preset:{ m1c:{x:390,y:260}, m2c:{x:520,y:260}, m2a:{x:520,y:505}, m2cej:{x:575,y:350}, m2d:{x:577,y:360},
+    m3top:R({x:55,y:-45}), m3c:R({x:0,y:-45}), m3a:R({x:0,y:200}), m3m:R({x:-55,y:-45}), m3d:R({x:55,y:45}),
+    ramus:{x:698,y:330}, ian:{x:R({x:0,y:200}).x, y:canal(R({x:0,y:200}).x)-12} }};
+}
+function loadSample(){
+  const smp = makeSample(); $('tooth').value='38'; setImage(smp.canvas,1200,700);
+  LM.forEach((l,i)=>{ pts[i]={...smp.preset[l.id]}; src[i]='dr'; });
+  $('r_darkRoot').checked=true; $('roots').value='1';
+  $('drName').value = $('drName').value || ''; $('ptName').value = $('ptName').value || 'Sample Patient'; $('ptFile').value = $('ptFile').value || 'DEMO-001';
+  $('obs').value = $('obs').value || 'Sample case: recurrent pericoronitis reported, mouth opening normal.';
+  refresh();
+}
+$('sample').addEventListener('click',loadSample);
+
+/* ================= DIAGNOSTICS ================= */
+async function refreshDiag(){
+  try{ permState = caps.perms ? await caps.perms.state() : {}; }catch(e){ permState={}; }
+  const st = n => permState[n] || 'unavailable';
+  const parts = ['Claude access: '+st('sample'), 'images: '+(caps.imagesConfirmedNo?'no (confirmed)':caps.sampleImages===true?'yes':caps.sampleImages===false?'reported no, will still try':'unknown'), 'PDF: '+(caps.downloads?'yes':'no'), 'case library: '+(caps.db?'yes':'no')];
+  $('diag').hidden=false; $('diag').textContent = 'Status  ·  '+parts.join('  ·  ');
+}
+async function ensureSampleAccess(){
+  if (!caps.perms) return true;
+  try{
+    const s0 = await caps.perms.state('sample');
+    if (s0==='granted') return true;
+    if (s0==='prompt'){ const r = await caps.perms.request(['sample']); await refreshDiag(); return r.sample==='granted'; }
+    await refreshDiag(); return s0!=='denied' && s0!=='unavailable';
+  }catch(e){ return true; }
+}
+/* Template fallback: a standard-anatomy starting layout so the dentist adjusts instead of starting from nothing */
+const TEMPLATE38 = {m1c:[0.12,0.40], m2c:[0.32,0.40], m2a:[0.32,0.70], m2cej:[0.42,0.50], m2d:[0.43,0.53], m3top:[0.52,0.44], m3c:[0.56,0.47], m3a:[0.62,0.75], m3m:[0.46,0.51], m3d:[0.66,0.46], ramus:[0.82,0.42], ian:[0.62,0.83]};
+function templateFallback(why){
+  const tooth=$('tooth').value, W=cv.width, H=cv.height;
+  const reg = tooth==='38' ? {x0:0.58,y0:0.40,x1:0.90,y1:0.82} : {x0:0.10,y0:0.40,x1:0.42,y1:0.82};
+  const rx=reg.x0*W, ry=reg.y0*H, rw=(reg.x1-reg.x0)*W, rh=(reg.y1-reg.y0)*H;
+  LM.forEach((l,i)=>{ const t=TEMPLATE38[l.id]; const nx = tooth==='38' ? t[0] : 1-t[0]; pts[i]={x:rx+nx*rw, y:ry+t[1]*rh}; src[i]='ai'; });
+  aiRegion={x:rx,y:ry,w:rw,h:rh}; unverify(); sel=-1; applyZoom(); refresh(); $('approveBar').hidden=false;
+  setAi('TEMPLATE ONLY, the AI did not see this X-ray ('+why+'). The amber points are a generic starting layout for tooth '+tooth+', not a detection. Drag each point onto the real anatomy, then approve.');
+}
+
+/* ================= CAPABILITIES ================= */
+async function initCaps(){
+  if (!window.claude || !window.claude.use){ gateExports(); renderLibrary(); capsReady=true; $('diag').hidden=false; $('diag').textContent='Not running inside Claude: AI detection, PDF export and the case library are unavailable here. Landmarks can still be placed by clicking.'; if (aiPending){ aiPending=false; templateFallback('page is not open in Claude'); } return; }
+  const [db,user,sample,downloads,perms] = await Promise.all(['db','user','sample','downloads','permissions'].map(n=>window.claude.use(n).catch(()=>null)));
+  caps.db=db; caps.user=user; caps.sample=sample; caps.downloads=downloads; caps.perms=perms;
+  if (sample){ try{ const lim = await sample.limits(); caps.sampleImages = !!(lim && lim.images); }catch(e){ caps.sampleImages=null; } }
+  await refreshDiag(); capsReady = true;
+  if (aiPending){ aiPending=false; runAi(true); }
+  if (user){ try{ myId = await user.id(); }catch(e){} }
+  if (db){
+    db.collection('cases').orderBy('createdAt','desc').limit(1000).onSnapshot(snap=>{
+      cases = snap.docs.map(d=>d.data()).filter(Boolean); renderLibrary(); refresh();
+    }, ()=>{ $('libMsg').textContent='The case library is unavailable in this view.'; });
+  }
+  renderLibrary(); refresh();
+}
+
+window.addEventListener('resize',draw);
+renderKB(); renderLibrary(); loadSample(); initCaps();
+})();
+</script>

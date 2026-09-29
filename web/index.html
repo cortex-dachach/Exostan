@@ -1,0 +1,201 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Exostan</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"><link rel="stylesheet" href="/exostan/exostan.css"><script src="/exostan/jspdf.umd.min.js" defer></script><script src="/exostan/exostan.js" defer></script></head><body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>EXOSTAN</h1>
+      <p>Third molar extraction difficulty and IAN risk from a panoramic radiograph. AI proposes, the dentist verifies, the report goes out.</p>
+    </div>
+    <span class="badge">v0.3 · research use</span>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-assess" aria-selected="true" aria-controls="pane-assess">Assess</button>
+    <button role="tab" id="tab-patient" aria-selected="false" aria-controls="pane-patient">Patient view</button>
+    <button role="tab" id="tab-library" aria-selected="false" aria-controls="pane-library">Case library</button>
+    <button role="tab" id="tab-kb" aria-selected="false" aria-controls="pane-kb">Knowledge base</button>
+  </nav>
+
+  <!-- ============ ASSESS ============ -->
+  <section id="pane-assess" role="tabpanel" aria-labelledby="tab-assess">
+    <div class="grid">
+      <section class="panel viewer" aria-label="Radiograph viewer">
+        <div class="toolbar">
+          <label class="btn primary">Upload OPG
+            <input id="file" type="file" accept="image/*">
+          </label>
+          <button id="aiDetect" class="aibtn" type="button">Re-run AI detection</button>
+          <button id="sample" type="button">Sample case</button>
+          <button id="undo" type="button">Undo</button>
+          <button id="clear" type="button">Clear</button>
+          <div class="sliders">
+            <label for="zoom">Zoom <select id="zoom" style="width:auto"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
+            <label for="bright">Brightness <input id="bright" type="range" min="50" max="180" value="100"></label>
+            <label for="contrast">Contrast <input id="contrast" type="range" min="50" max="220" value="115"></label>
+          </div>
+        </div>
+
+        <div class="aistatus" id="aiStatus" hidden></div>
+        <p class="note" id="diag" hidden></p>
+
+        <div class="prompt" id="prompt">
+          <span class="n" id="pN">1/12</span>
+          <strong id="pName">M1 cusp tip</strong>
+          <span class="h" id="pHint"></span>
+        </div>
+
+        <div class="approve" id="approveBar" hidden>
+          <div><strong>AI placed all 12 landmarks.</strong> <span class="muted">Check the overlay. Drag any point that is off, then approve.</span></div>
+          <div class="toolbar"><button id="approveAll" class="primary" type="button">Approve landmarks</button><button id="rerun" type="button">Re-run AI</button></div>
+        </div>
+
+        <div class="stage" id="stage">
+          <div class="busy" id="busy" hidden>Detecting landmarks…</div>
+          <canvas id="cv" width="1200" height="700" aria-label="Radiograph with landmarks. Click to place the highlighted landmark, drag any point to adjust, or select a point and use the arrow keys." tabindex="0"></canvas>
+        </div>
+        <div class="legend"><span><i style="background:#F2A93B"></i>AI proposed, not yet checked</span><span><i style="background:#4FB3FF"></i>Placed or confirmed by dentist</span><span><i style="background:#FFD35A"></i>Selected</span></div>
+        <div class="tipsrow">
+          <button id="fillAi" class="aibtn" type="button">Fill with AI</button>
+          <p class="note" style="flex:1 1 280px;min-width:0">Upload an OPG and Exostan detects the third molar and all 12 landmarks automatically. Your role is to check and approve. To correct a point, drag it (a magnifier appears while dragging). Click a landmark name below to select it, then use the arrow keys to nudge it, or click the image to move it there. Drop a JPG or PNG export onto the viewer; export DICOM to PNG first.</p>
+        </div>
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <aside class="side">
+        <section class="panel sec" aria-label="Case details">
+          <h2>Case details</h2>
+          <div class="form">
+            <label for="drName">Dentist name<input id="drName" type="text" placeholder="Dr. Moneeb ..." autocomplete="name"></label>
+            <label for="clinic">Clinic<input id="clinic" type="text" placeholder="Clinic name"></label>
+            <label for="ptName">Patient name<input id="ptName" type="text" placeholder="Patient full name"></label>
+            <label for="ptFile">Patient file no.<input id="ptFile" type="text" placeholder="e.g. 204518"></label>
+            <label for="caseDate">Date<input id="caseDate" type="date"></label>
+            <label for="tooth">Tooth
+              <select id="tooth"><option value="38">38 (lower left, image right)</option><option value="48">48 (lower right, image left)</option></select>
+            </label>
+          </div>
+          <p class="note" style="margin-top:8px">Patient name and file number appear only on the reports. The case library keeps de-identified findings.</p>
+        </section>
+
+        <section class="panel sec" aria-label="Scores">
+          <h2><span>Exostan result · tooth <span id="toothLabel">38</span></span><span id="learnTag" class="muted" style="text-transform:none;letter-spacing:0;font-size:12px"></span></h2>
+          <div class="scores">
+            <div class="score">
+              <div class="lab">Extraction difficulty</div>
+              <div class="val" id="diffVal">–<small>%</small></div>
+              <div class="bar"><i id="diffBar"></i></div>
+              <span class="pill" id="diffBand">Awaiting landmarks</span>
+              <div class="sub" id="diffSub"></div>
+            </div>
+            <div class="score">
+              <div class="lab">IAN contact likelihood</div>
+              <div class="val" id="ianVal">–<small>%</small></div>
+              <div class="bar"><i id="ianBar"></i></div>
+              <span class="pill" id="ianBand">Awaiting landmarks</span>
+              <div class="sub" id="ianSub"></div>
+            </div>
+          </div>
+          <div class="verdict" id="verdict">Upload an OPG and press AI detect landmarks, or place the 12 points yourself.</div>
+          <div class="verdict" id="similar" hidden></div>
+        </section>
+
+        <section class="panel sec" aria-label="Classification">
+          <h2>Classification</h2>
+          <div class="tbl"><table>
+            <thead><tr><th>Factor</th><th>Finding</th><th class="num">Measure</th><th class="num">Pts</th></tr></thead>
+            <tbody id="clsBody"></tbody>
+            <tfoot><tr><th colspan="3">Pederson index (3 to 10) + modifiers</th><td class="num" id="totalPts">–</td></tr></tfoot>
+          </table></div>
+          <div class="verdict" id="paperRule" style="margin-top:10px"></div>
+        </section>
+
+        <section class="panel sec" aria-label="Clinical review">
+          <h2>Dentist review</h2>
+          <div class="form">
+            <label for="angOv">Angulation
+              <select id="angOv"><option value="auto">Auto from landmarks</option><option value="Vertical">Vertical</option><option value="Mesioangular">Mesioangular</option><option value="Horizontal">Horizontal</option><option value="Distoangular">Distoangular</option></select>
+            </label>
+            <label for="contactOv">M2 contact
+              <select id="contactOv"><option value="auto">Auto from landmarks</option><option value="yes">Contact</option><option value="no">No contact</option></select>
+            </label>
+            <label for="roots">Root morphology
+              <select id="roots"><option value="0">Fused or conical</option><option value="1">Multiple or divergent</option><option value="2">Curved or hooked</option></select>
+            </label>
+            <label for="crownMm">M3 crown width (mm, for scale)
+              <input id="crownMm" type="number" min="7" max="14" step="0.5" value="10">
+            </label>
+          </div>
+          <p class="note" style="margin:12px 0 6px">Rood and Shehab signs on this OPG (see Knowledge base for how to read each one):</p>
+          <div class="checks" id="rood"></div>
+          <label for="obs" class="note" style="display:block;margin-top:12px">Clinical observations
+            <textarea id="obs" placeholder="Mouth opening, pericoronitis, caries on 37, patient anxiety, medical history relevant to surgery..."></textarea>
+          </label>
+          <p class="note" style="margin:12px 0 6px">Actions taken:</p>
+          <div class="checks" id="actions"></div>
+          <label for="otherAct" class="note" style="display:block;margin-top:8px">Other actions
+            <input id="otherAct" type="text" placeholder="e.g. Chlorhexidine rinse prescribed">
+          </label>
+          <div class="row">
+            <label for="drBand" style="flex:1 1 220px">Dentist's final call
+              <select id="drBand"><option value="agree">Agree with Exostan</option><option value="Easy">Easy</option><option value="Moderate">Moderate</option><option value="Difficult">Difficult</option><option value="Refer to OMFS">Refer to OMFS</option></select>
+            </label>
+          </div>
+          <label class="verify" id="verifyBox" for="verified" style="margin-top:12px">
+            <input type="checkbox" id="verified">
+            <span>I have reviewed the landmarks, signs and findings on this radiograph and confirm this assessment.</span>
+          </label>
+        </section>
+
+        <section class="panel sec" aria-label="Reports and exports">
+          <h2>Reports</h2>
+          <div class="exports">
+            <button id="pdfDr" class="primary" type="button"><b>Dentist PDF</b><span>Full analysis, image, actions</span></button>
+            <button id="pdfPt" type="button"><b>Patient PDF</b><span>Plain language, next steps</span></button>
+            <button id="aiSum" type="button"><b>Write AI summary</b><span>Narrative for both reports</span></button>
+            <button id="saveCase" type="button"><b>Save to case library</b><span>Adds to Exostan learning</span></button>
+            <button id="emailPt" type="button"><b>Email to patient</b><span>Copy ready text</span></button>
+            <button id="emailRef" type="button"><b>Referral letter</b><span>Copy for OMFS referral</span></button>
+            <button id="copyJson" type="button"><b>Patient log record</b><span>Copy JSON for the records API</span></button>
+            <button id="sendApi" type="button" disabled><b>Send to patient file</b><span>API not connected yet</span></button>
+          </div>
+          <p class="msg" id="exportMsg" aria-live="polite"></p>
+          <pre class="report" id="report">No assessment yet.</pre>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ PATIENT VIEW ============ -->
+  <section id="pane-patient" role="tabpanel" aria-labelledby="tab-patient" hidden>
+    <article class="panel patient" id="patientView"></article>
+  </section>
+
+  <!-- ============ LIBRARY ============ -->
+  <section id="pane-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+    <div class="side">
+      <section class="panel sec">
+        <h2>How Exostan learns</h2>
+        <div class="stat" id="libStats"></div>
+        <p class="note" style="margin-top:10px">Every saved case is stored without patient identity. When you record the surgical outcome (actual difficulty, CBCT result, nerve outcome), Exostan compares it with its prediction. Once there are 5 outcomes it adds a similar-case estimate to the difficulty score. Once there are 20 CBCT-verified cases it refits the IAN weights on your own data. Rules and literature weights stay in charge until the data is large enough.</p>
+      </section>
+      <section class="panel sec">
+        <h2>Cases <button id="copyCsv" type="button" style="text-transform:none;letter-spacing:0">Copy as CSV</button></h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Case</th><th>Date</th><th>Tooth</th><th>Winter</th><th>Depth / ramus</th><th class="num">Diff</th><th class="num">IAN</th><th>Dentist call</th><th>Outcome</th><th></th></tr></thead>
+          <tbody id="libBody"><tr><td colspan="10" class="muted">No saved cases yet. Assess an OPG, verify it, then press Save to case library.</td></tr></tbody>
+        </table></div>
+        <p class="msg" id="libMsg" aria-live="polite"></p>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============ KNOWLEDGE BASE ============ -->
+  <section id="pane-kb" role="tabpanel" aria-labelledby="tab-kb" hidden>
+    <div class="kb" id="kb"></div>
+  </section>
+
+  <div class="warnbox">
+    Decision support prototype. Angulation, depth and ramus relation are measured from verified landmarks and scored with the Pederson index. IAN likelihood combines root to canal distance with Rood and Shehab signs weighted by published likelihood ratios. A panoramic radiograph cannot rule out nerve contact; CBCT is the reference standard. The treating dentist remains responsible for every clinical decision.
+  </div>
+</div>
+<canvas id="loupe" width="170" height="170" hidden></canvas>
+</body></html>
