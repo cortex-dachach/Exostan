@@ -1,0 +1,27 @@
+name: media-relay
+on:
+  push:
+    branches: [media-relay]
+    paths: ['fetch.txt']
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download listed media
+        run: |
+          mkdir -p ai
+          while read -r name url; do
+            [ -z "$name" ] && continue
+            curl -sSL -o "ai/$name" "$url"
+          done < fetch.txt
+          ls -la ai
+      - name: Commit
+        run: |
+          git config user.name "media-relay"
+          git config user.email "noreply@github.com"
+          git add ai
+          git commit -m "relay: fetched media" || echo "nothing to commit"
+          git push
